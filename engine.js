@@ -202,6 +202,11 @@ function evaluateStrategy(classData, currentState, goals, gearInt, mwMultiplier,
     return { feasible: false, reason: `MP at lvl ${mpWashStart} (${Math.round(mpAtMPWashStart)}) would be below Min MP (${minMPAtStart})` };
   }
 
+  // Min MP at end of phase 3 (after fresh HP washes drain MP)
+  if (mpEndPhase3 < minMPAtLevel(classData, goals.targetLevel)) {
+    return { feasible: false, reason: `MP at lvl ${goals.targetLevel} after Fresh HP washes (${Math.round(mpEndPhase3)}) would be below Min MP (${minMPAtLevel(classData, goals.targetLevel)})` };
+  }
+
   // --- Final cleanup at targetLevel: reset INT + stale HP wash ---
   // INT reset cost (non-Mage only)
   const intResetAPResets = isMage ? 0 : Math.max(0, targetBaseInt - STARTING_MAIN_STAT);
