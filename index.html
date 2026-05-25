@@ -3,135 +3,946 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>MapleWasher</title>
+  <title>MapleWasher — HP/MP wash planner for MapleLegends</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght,SOFT@9..144,300..900,0..100&family=Inter+Tight:wght@300..700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
   <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
+    :root {
+      --bg: #181410;
+      --bg-grain: #1d1814;
+      --surface: #221c17;
+      --surface-2: #2a221b;
+      --line: #3a2f25;
+      --line-soft: #2c241d;
+      --text: #ece1cc;
+      --text-2: #c7b69d;
+      --text-mute: #8a7866;
+      --text-faint: #5e4f42;
+      --maple: #c8533b;
+      --maple-glow: rgba(200, 83, 59, 0.18);
+      --amber: #d4a24f;
+      --moss: #7d9468;
+      --clay: #c19370;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
 
     body {
-      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-      background: #1c1917;
-      color: #e0e0e0;
+      font-family: 'Inter Tight', system-ui, sans-serif;
+      font-weight: 400;
+      background: var(--bg);
+      color: var(--text);
       min-height: 100vh;
+      line-height: 1.5;
+      -webkit-font-smoothing: antialiased;
+      text-rendering: optimizeLegibility;
+      background-image:
+        radial-gradient(ellipse 80% 50% at 50% -10%, rgba(200, 83, 59, 0.06), transparent),
+        url("data:image/svg+xml;utf8,<svg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.04 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+      background-attachment: fixed, fixed;
+    }
+
+    .frame {
+      max-width: 1080px;
+      margin: 0 auto;
+      padding: 64px 32px 96px;
+    }
+
+    .head {
       display: flex;
-      justify-content: center;
-      padding: 24px 16px;
+      align-items: baseline;
+      gap: 18px;
+      margin-bottom: 12px;
     }
 
-    .container {
-      max-width: 1000px;
-      width: 100%;
+    .mark {
+      width: 32px; height: 32px;
+      flex-shrink: 0;
+      transform: translateY(6px);
+    }
+    .mark path { fill: var(--maple); }
+
+    .wordmark {
+      font-family: 'Fraunces', serif;
+      font-weight: 400;
+      font-size: 44px;
+      letter-spacing: -0.02em;
+      font-variation-settings: 'opsz' 144, 'SOFT' 100;
+      color: var(--text);
+    }
+    .wordmark .em-w {
+      font-style: italic;
+      font-weight: 300;
+      color: var(--maple);
     }
 
-    h1 {
-      text-align: center;
-      color: #f5f0e8;
-      font-size: 1.6rem;
+    .tagline {
+      font-family: 'Fraunces', serif;
+      font-style: italic;
+      font-weight: 300;
+      font-size: 15px;
+      color: var(--text-mute);
+      padding-left: 4px;
+      border-left: 1px solid var(--line);
+      margin-left: 4px;
+      padding-block: 4px 6px;
+    }
+
+    .meta-line {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--text-faint);
+      margin-bottom: 56px;
+    }
+    .meta-line a {
+      color: var(--text-mute);
+      text-decoration: none;
+      border-bottom: 1px dotted var(--line);
+    }
+    .meta-line a:hover { color: var(--maple); border-color: var(--maple); }
+
+    .section { margin-bottom: 48px; }
+
+    .section-head {
+      display: flex;
+      align-items: baseline;
+      gap: 16px;
       margin-bottom: 24px;
     }
-
-    .section {
-      background: #292524;
-      border: 1px solid #44403c;
-      border-radius: 8px;
-      padding: 20px;
-      margin-bottom: 16px;
+    .section-num {
+      font-family: 'Fraunces', serif;
+      font-style: italic;
+      font-weight: 300;
+      font-size: 14px;
+      color: var(--maple);
+      letter-spacing: 0.02em;
     }
-
     .section-title {
-      font-size: 0.85rem;
+      font-family: 'Inter Tight', sans-serif;
+      font-weight: 500;
+      font-size: 11px;
+      letter-spacing: 0.28em;
       text-transform: uppercase;
-      letter-spacing: 1px;
-      color: #d6d3d1;
-      margin-bottom: 14px;
+      color: var(--text-mute);
+    }
+    .section-rule {
+      flex: 1;
+      height: 1px;
+      background: var(--line-soft);
     }
 
-    label {
-      display: block;
-      font-size: 0.85rem;
-      color: #d6d3d1;
-      margin-bottom: 6px;
+    .input-group { margin-bottom: 28px; }
+    .group-label {
+      font-family: 'Fraunces', serif;
+      font-style: italic;
+      font-weight: 300;
+      font-size: 18px;
+      color: var(--text-2);
+      margin-bottom: 12px;
+      letter-spacing: -0.01em;
     }
-
-    input, select {
+    .group-label .nb {
+      font-style: normal;
+      color: var(--text-faint);
+      font-size: 13px;
+    }
+    .field-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 4px 20px;
+    }
+    .field {
+      display: flex;
+      flex-direction: column;
+      padding: 14px 0 12px;
+      border-bottom: 1px solid var(--line);
+      transition: border-color 0.2s ease;
+    }
+    .field:focus-within { border-color: var(--maple); }
+    .field label {
+      font-family: 'Inter Tight', sans-serif;
+      font-size: 10px;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: var(--text-mute);
+      margin-bottom: 4px;
+      transition: color 0.2s ease;
+    }
+    .field:focus-within label { color: var(--maple); }
+    .field input,
+    .field select {
+      background: transparent;
+      border: 0;
+      outline: 0;
+      color: var(--text);
+      font-family: 'JetBrains Mono', monospace;
+      font-weight: 500;
+      font-size: 18px;
+      padding: 0;
       width: 100%;
-      background: #1c1917;
-      border: 1px solid #44403c;
-      border-radius: 4px;
-      padding: 8px 10px;
-      color: #e0e0e0;
-      font-family: inherit;
-      font-size: 0.9rem;
+      appearance: none;
+      cursor: text;
     }
-
-    input:focus, select:focus { outline: none; border-color: #e8814a; }
-
-    .btn {
-      display: inline-block;
-      background: #e8814a;
-      color: #1c1917;
-      border: none;
-      border-radius: 4px;
-      padding: 8px 20px;
-      font-size: 0.9rem;
-      font-weight: 600;
+    .field select {
       cursor: pointer;
-      margin-top: 10px;
+      font-family: 'Fraunces', serif;
+      font-weight: 400;
+      font-size: 19px;
+      font-variation-settings: 'opsz' 36;
+      background-image: linear-gradient(45deg, transparent 50%, var(--text-mute) 50%),
+                        linear-gradient(135deg, var(--text-mute) 50%, transparent 50%);
+      background-position: right 6px center, right 0px center;
+      background-size: 6px 6px;
+      background-repeat: no-repeat;
+      padding-right: 18px;
     }
+    .field select option {
+      background: var(--surface);
+      color: var(--text);
+      font-family: 'Inter Tight';
+      font-size: 14px;
+    }
+    .field input::placeholder { color: var(--text-faint); }
 
-    .btn:hover { background: #f0996a; }
+    .calc-row {
+      display: flex;
+      align-items: center;
+      gap: 24px;
+      margin-top: 32px;
+    }
+    .btn-calc {
+      font-family: 'Fraunces', serif;
+      font-weight: 400;
+      font-size: 18px;
+      letter-spacing: 0.01em;
+      font-variation-settings: 'opsz' 36, 'SOFT' 50;
+      color: var(--bg);
+      background: var(--amber);
+      border: 0;
+      padding: 14px 34px;
+      cursor: pointer;
+      transition: background 0.18s ease, transform 0.18s ease, box-shadow 0.18s ease;
+      box-shadow: 0 0 0 0 var(--maple-glow);
+    }
+    .btn-calc:hover {
+      background: #e7b35a;
+      box-shadow: 0 8px 28px -4px rgba(212, 162, 79, 0.35);
+      transform: translateY(-1px);
+    }
+    .btn-calc:active { transform: translateY(0); }
+    .btn-calc .arr {
+      display: inline-block;
+      margin-left: 10px;
+      font-style: italic;
+      transition: transform 0.18s ease;
+    }
+    .btn-calc:hover .arr { transform: translateX(4px); }
+    .calc-hint {
+      font-family: 'Fraunces', serif;
+      font-style: italic;
+      font-weight: 300;
+      font-size: 14px;
+      color: var(--text-mute);
+    }
 
     .result {
-      font-family: 'Consolas', 'Courier New', monospace;
-      font-size: 1rem;
-      color: #f5f0e8;
-      padding: 12px;
-      background: #1c1917;
-      border-radius: 4px;
-      border: 1px solid #44403c;
-      white-space: pre-wrap;
+      opacity: 0;
+      transform: translateY(8px);
+      transition: opacity 0.5s ease, transform 0.5s ease;
+    }
+    .result.shown {
+      opacity: 1;
+      transform: translateY(0);
     }
 
-    .grid {
+    .summary-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      grid-template-columns: 1fr 1fr;
+      gap: 0 48px;
+      margin-bottom: 40px;
+    }
+    .stat-line {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      padding: 16px 0;
+      border-bottom: 1px solid var(--line-soft);
+      gap: 24px;
+    }
+    .stat-label {
+      font-family: 'Fraunces', serif;
+      font-style: italic;
+      font-weight: 300;
+      font-size: 17px;
+      color: var(--text-2);
+      letter-spacing: -0.005em;
+    }
+    .stat-value {
+      font-family: 'JetBrains Mono', monospace;
+      font-weight: 500;
+      font-size: 22px;
+      color: var(--text);
+      font-variant-numeric: tabular-nums;
+      letter-spacing: -0.02em;
+    }
+    .stat-value.feature {
+      font-family: 'Fraunces', serif;
+      font-weight: 400;
+      font-size: 32px;
+      font-variation-settings: 'opsz' 60;
+      color: var(--amber);
+      letter-spacing: -0.02em;
+    }
+    .stat-value.feature .unit {
+      font-family: 'Inter Tight', sans-serif;
+      font-weight: 400;
+      font-size: 12px;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--text-mute);
+      margin-left: 8px;
+      vertical-align: 4px;
+    }
+
+    .breakdown { margin-top: 32px; }
+    .breakdown-title {
+      font-family: 'Fraunces', serif;
+      font-style: italic;
+      font-weight: 300;
+      font-size: 17px;
+      color: var(--text-2);
+      margin-bottom: 14px;
+    }
+    .breakdown-rows { display: grid; gap: 6px; }
+    .br-row {
+      display: grid;
+      grid-template-columns: 90px 140px 1fr;
+      gap: 18px;
+      align-items: baseline;
+      padding: 8px 0;
+      border-bottom: 1px dotted var(--line-soft);
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .br-count {
+      text-align: right;
+      font-weight: 500;
+      font-size: 15px;
+      font-variant-numeric: tabular-nums;
+      color: var(--text);
+    }
+    .br-op { color: var(--maple); font-size: 13px; }
+    .br-desc {
+      font-family: 'Fraunces', serif;
+      font-style: italic;
+      font-weight: 300;
+      color: var(--text-mute);
+      font-size: 15px;
+    }
+
+    .phases { display: grid; gap: 16px; }
+    .phase {
+      display: grid;
+      grid-template-columns: 170px 1fr;
+      gap: 28px;
+      padding: 14px 0;
+      border-bottom: 1px solid var(--line-soft);
+    }
+    .phase-range {
+      font-family: 'JetBrains Mono', monospace;
+      font-weight: 500;
+      font-size: 13px;
+      color: var(--maple);
+      font-variant-numeric: tabular-nums;
+      padding-top: 2px;
+    }
+    .phase-body {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .phase-name {
+      font-family: 'Inter Tight', sans-serif;
+      font-size: 10px;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: var(--text-mute);
+    }
+    .phase-action {
+      font-family: 'Fraunces', serif;
+      font-weight: 350;
+      font-size: 18px;
+      color: var(--text);
+      font-variation-settings: 'opsz' 24;
+      line-height: 1.4;
+      letter-spacing: -0.005em;
+    }
+
+    .leveltable-toggle {
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
       gap: 12px;
+      color: var(--text-mute);
+      font-family: 'Inter Tight', sans-serif;
+      font-size: 11px;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      background: none;
+      border: 0;
+      padding: 8px 0;
+      user-select: none;
+      transition: color 0.2s ease;
+    }
+    .leveltable-toggle:hover { color: var(--maple); }
+    .leveltable-toggle .triangle {
+      font-size: 9px;
+      transition: transform 0.25s ease;
+    }
+    .leveltable-toggle.open .triangle { transform: rotate(90deg); }
+    .leveltable-toggle .count {
+      color: var(--text-faint);
+      font-family: 'JetBrains Mono', monospace;
+      letter-spacing: 0;
+    }
+    .leveltable {
+      max-height: 0;
+      overflow: hidden;
+      transition: max-height 0.4s ease;
+      margin-top: 12px;
+    }
+    .leveltable.open { max-height: 9999px; }
+    .leveltable-inner {
+      overflow-x: auto;
+      max-height: 560px;
+      border: 1px solid var(--line-soft);
+    }
+    table.lt {
+      width: 100%;
+      border-collapse: collapse;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12.5px;
+      font-variant-numeric: tabular-nums;
+    }
+    table.lt thead th {
+      position: sticky;
+      top: 0;
+      background: var(--surface);
+      color: var(--text-mute);
+      font-family: 'Inter Tight', sans-serif;
+      font-size: 9.5px;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      font-weight: 500;
+      text-align: right;
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--line);
+    }
+    table.lt thead th:first-child,
+    table.lt thead th.phase-col { text-align: left; }
+    table.lt td {
+      padding: 7px 14px;
+      text-align: right;
+      color: var(--text-2);
+      border-bottom: 1px solid var(--line-soft);
+    }
+    table.lt td:first-child { text-align: left; color: var(--text-mute); }
+    table.lt td.phase-col {
+      text-align: left;
+      font-family: 'Fraunces', serif;
+      font-style: italic;
+      font-weight: 300;
+      font-size: 13px;
+      color: var(--text-mute);
+    }
+    table.lt tr.boundary td { color: var(--maple); border-bottom-color: var(--maple-glow); }
+    table.lt tr.boundary td.phase-col { color: var(--maple); font-style: normal; font-weight: 400; }
+    table.lt tr:hover td { background: rgba(255, 255, 255, 0.015); }
+
+    .infeas {
+      border-left: 2px solid var(--maple);
+      padding: 24px 28px;
+      background: linear-gradient(90deg, var(--maple-glow), transparent 60%);
+      margin-bottom: 32px;
+    }
+    .infeas-head {
+      font-family: 'Fraunces', serif;
+      font-style: italic;
+      font-weight: 300;
+      font-size: 22px;
+      color: var(--maple);
+      margin-bottom: 8px;
+    }
+    .infeas-body {
+      font-family: 'Fraunces', serif;
+      font-weight: 350;
+      font-size: 16px;
+      color: var(--text-2);
+      line-height: 1.55;
+      font-variation-settings: 'opsz' 24;
+    }
+
+    .footer {
+      margin-top: 96px;
+      padding-top: 32px;
+      border-top: 1px solid var(--line-soft);
+      font-family: 'Fraunces', serif;
+      font-style: italic;
+      font-weight: 300;
+      font-size: 13px;
+      color: var(--text-faint);
+      display: flex;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+    .footer a { color: var(--text-mute); text-decoration: none; }
+    .footer a:hover { color: var(--maple); }
+
+    @media (max-width: 720px) {
+      .frame { padding: 40px 20px 64px; }
+      .wordmark { font-size: 36px; }
+      .summary-grid { grid-template-columns: 1fr; gap: 0; }
+      .phase { grid-template-columns: 1fr; gap: 8px; }
+      .br-row { grid-template-columns: 70px 110px 1fr; gap: 12px; }
+      .calc-row { flex-direction: column; align-items: stretch; }
+      .stat-value.feature { font-size: 26px; }
     }
   </style>
 </head>
 <body>
-  <div class="container">
-    <h1>MapleWasher</h1>
+  <main class="frame">
 
-    <div class="section">
-      <div class="section-title">Inputs</div>
-      <div class="grid">
-        <div>
-          <label for="input-a">Input A</label>
-          <input id="input-a" type="number" value="0">
-        </div>
-        <div>
-          <label for="input-b">Input B</label>
-          <input id="input-b" type="number" value="0">
+    <header>
+      <div class="head">
+        <svg class="mark" viewBox="0 0 32 32" aria-hidden="true">
+          <path d="M16 2 L19 9 L26 8 L22 14 L28 18 L21 19 L22 26 L16 22 L10 26 L11 19 L4 18 L10 14 L6 8 L13 9 Z"/>
+        </svg>
+        <h1 class="wordmark">Maple<span class="em-w">Washer</span></h1>
+        <span class="tagline">An HP/MP wash planner for MapleLegends</span>
+      </div>
+      <div class="meta-line">
+        Mid-range averages · Following Nise's formula compilation · <a href="https://forum.legends.ml/index.php?threads/nises-hp-washing-formula-compilation.38558/" target="_blank" rel="noopener">source</a>
+      </div>
+    </header>
+
+    <section class="section">
+      <div class="section-head">
+        <span class="section-num">i.</span>
+        <h2 class="section-title">your character</h2>
+        <span class="section-rule"></span>
+      </div>
+
+      <div class="input-group">
+        <div class="group-label">Class</div>
+        <div class="field-grid">
+          <div class="field" style="grid-column: 1 / -1;">
+            <label for="i-class">job</label>
+            <select id="i-class"></select>
+          </div>
         </div>
       </div>
-      <button class="btn" id="calc-btn">Calculate</button>
-    </div>
 
-    <div class="section">
-      <div class="section-title">Result</div>
-      <div class="result" id="result">—</div>
-    </div>
-  </div>
+      <div class="input-group">
+        <div class="group-label">Current state <span class="nb">— defaults are a fresh level 1</span></div>
+        <div class="field-grid">
+          <div class="field">
+            <label for="i-cur-level">level</label>
+            <input id="i-cur-level" type="number" inputmode="numeric" min="1" max="200" value="1">
+          </div>
+          <div class="field">
+            <label for="i-cur-hp">hp</label>
+            <input id="i-cur-hp" type="number" inputmode="numeric" min="0" value="50">
+          </div>
+          <div class="field">
+            <label for="i-cur-mp">mp</label>
+            <input id="i-cur-mp" type="number" inputmode="numeric" min="0" value="5">
+          </div>
+          <div class="field">
+            <label for="i-cur-int">base int</label>
+            <input id="i-cur-int" type="number" inputmode="numeric" min="4" value="4">
+          </div>
+          <div class="field">
+            <label for="i-cur-mainstat"><span id="i-cur-mainstat-label">main stat</span></label>
+            <input id="i-cur-mainstat" type="number" inputmode="numeric" min="4" value="4">
+          </div>
+        </div>
+      </div>
 
+      <div class="input-group">
+        <div class="group-label">Goals</div>
+        <div class="field-grid">
+          <div class="field">
+            <label for="i-hp-goal">hp goal</label>
+            <input id="i-hp-goal" type="number" inputmode="numeric" min="0" value="30000">
+          </div>
+          <div class="field">
+            <label for="i-mp-goal">mp goal</label>
+            <input id="i-mp-goal" type="number" inputmode="numeric" min="0" value="4000">
+          </div>
+          <div class="field">
+            <label for="i-target-level">target level</label>
+            <input id="i-target-level" type="number" inputmode="numeric" min="2" max="200" value="135">
+          </div>
+        </div>
+      </div>
+
+      <div class="input-group">
+        <div class="group-label">Gear &amp; buffs <span class="nb">— INT gear is treated as worn from lvl 10 onward</span></div>
+        <div class="field-grid">
+          <div class="field">
+            <label for="i-gear-int">gear int</label>
+            <input id="i-gear-int" type="number" inputmode="numeric" min="0" value="40">
+          </div>
+          <div class="field">
+            <label for="i-mw">maple warrior</label>
+            <select id="i-mw"></select>
+          </div>
+        </div>
+      </div>
+
+      <div class="calc-row">
+        <button id="btn-calc" class="btn-calc">Calculate optimal plan <span class="arr">→</span></button>
+        <span class="calc-hint">Output recomputes when you change inputs.</span>
+      </div>
+    </section>
+
+    <section class="section result" id="result">
+      <div class="section-head">
+        <span class="section-num">ii.</span>
+        <h2 class="section-title">the plan</h2>
+        <span class="section-rule"></span>
+      </div>
+
+      <div id="infeas-block"></div>
+
+      <div id="summary-block">
+        <div class="summary-grid" id="summary-grid"></div>
+
+        <div class="breakdown">
+          <div class="breakdown-title">— AP Reset breakdown</div>
+          <div class="breakdown-rows" id="breakdown-rows"></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section result" id="phases-section">
+      <div class="section-head">
+        <span class="section-num">iii.</span>
+        <h2 class="section-title">phases</h2>
+        <span class="section-rule"></span>
+      </div>
+      <div class="phases" id="phases-list"></div>
+    </section>
+
+    <section class="section result" id="leveltable-section">
+      <div class="section-head">
+        <span class="section-num">iv.</span>
+        <h2 class="section-title">level by level</h2>
+        <span class="section-rule"></span>
+      </div>
+
+      <button class="leveltable-toggle" id="leveltable-toggle">
+        <span class="triangle">▶</span>
+        <span class="ltlabel">Show full level table</span>
+        <span class="count" id="leveltable-count"></span>
+      </button>
+
+      <div class="leveltable" id="leveltable">
+        <div class="leveltable-inner">
+          <table class="lt" id="lt-table">
+            <thead>
+              <tr>
+                <th>lvl</th>
+                <th>hp</th>
+                <th>mp</th>
+                <th>base int</th>
+                <th class="phase-col">phase</th>
+                <th>resets / lvl</th>
+                <th>cumul. resets</th>
+              </tr>
+            </thead>
+            <tbody id="lt-body"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <footer class="footer">
+      <span>Built on Nise &amp; Krythan's MapleLegends formulas.</span>
+      <span><a href="https://github.com/tablofan/MapleWasher" target="_blank" rel="noopener">github.com/tablofan/MapleWasher</a></span>
+    </footer>
+  </main>
+
+  <script src="./classes.js"></script>
+  <script src="./engine.js"></script>
   <script>
-    const calcBtn = document.getElementById('calc-btn');
-    const resultEl = document.getElementById('result');
-
-    calcBtn.addEventListener('click', () => {
-      const a = parseFloat(document.getElementById('input-a').value) || 0;
-      const b = parseFloat(document.getElementById('input-b').value) || 0;
-      resultEl.textContent = `A + B = ${a + b}`;
+    const classSelect = document.getElementById('i-class');
+    CLASS_ORDER.forEach(c => {
+      const o = document.createElement('option');
+      o.value = c; o.textContent = c;
+      if (c === 'Night Lord') o.selected = true;
+      classSelect.appendChild(o);
     });
+
+    const mwSelect = document.getElementById('i-mw');
+    MAPLE_WARRIOR_LEVELS.forEach(mw => {
+      const o = document.createElement('option');
+      o.value = mw.level; o.textContent = mw.label;
+      mwSelect.appendChild(o);
+    });
+
+    const $ = id => document.getElementById(id);
+    const fmt = n => Number(n).toLocaleString(undefined, { maximumFractionDigits: 0 });
+
+    function updateMainStatLabel() {
+      const cls = CLASSES[classSelect.value];
+      $('i-cur-mainstat-label').textContent = cls.mainStat.toLowerCase();
+    }
+
+    function readInputs() {
+      const className = classSelect.value;
+      const classData = CLASSES[className];
+      const mwLevel = parseInt(mwSelect.value, 10);
+      const mwMultiplier = MAPLE_WARRIOR_LEVELS.find(m => m.level === mwLevel).multiplier;
+
+      return {
+        className,
+        classData,
+        currentState: {
+          level: parseInt($('i-cur-level').value, 10) || 1,
+          hp: parseFloat($('i-cur-hp').value) || 50,
+          mp: parseFloat($('i-cur-mp').value) || 5,
+          baseInt: parseInt($('i-cur-int').value, 10) || 4,
+          mainStat: parseInt($('i-cur-mainstat').value, 10) || 4,
+        },
+        goals: {
+          hpGoal: parseFloat($('i-hp-goal').value) || 0,
+          mpGoal: parseFloat($('i-mp-goal').value) || 0,
+          targetLevel: parseInt($('i-target-level').value, 10) || 100,
+        },
+        gearInt: parseInt($('i-gear-int').value, 10) || 0,
+        mwMultiplier,
+        mwLevel,
+      };
+    }
+
+    function animateNumber(el, start, end, duration = 700, suffix = '') {
+      const startTime = performance.now();
+      const tick = (t) => {
+        const elapsed = t - startTime;
+        const progress = Math.min(1, elapsed / duration);
+        const eased = 1 - Math.pow(1 - progress, 3);
+        const current = start + (end - start) * eased;
+        el.firstChild.textContent = fmt(Math.round(current)) + suffix;
+        if (progress < 1) requestAnimationFrame(tick);
+      };
+      requestAnimationFrame(tick);
+    }
+
+    const opLabels = {
+      shift: { op: '-STAT +INT', label: 'Mid-progress shift to INT' },
+      mpWash: { op: '-MP +INT/STAT', label: 'MP Wash cycles' },
+      phase3Fresh: { op: '-MP +STAT', label: 'Fresh HP Wash (post-MP-Wash)' },
+      intReset: { op: '-INT +STAT', label: 'Reset Base INT' },
+      staleHPWash: { op: '-MP +HP', label: 'Stale HP Wash' },
+    };
+
+    function renderResult(input, result) {
+      const resultSection = $('result');
+      const phasesSection = $('phases-section');
+      const leveltableSection = $('leveltable-section');
+
+      $('leveltable').classList.remove('open');
+      $('leveltable-toggle').classList.remove('open');
+      $('leveltable-toggle').querySelector('.ltlabel').textContent = 'Show full level table';
+
+      if (!result.feasible) {
+        $('infeas-block').innerHTML = `
+          <div class="infeas">
+            <div class="infeas-head">This plan is not reachable</div>
+            <div class="infeas-body">${result.reason}</div>
+          </div>
+        `;
+        $('summary-block').style.display = 'none';
+        phasesSection.style.display = 'none';
+        leveltableSection.style.display = 'none';
+        resultSection.classList.add('shown');
+        return;
+      }
+
+      $('infeas-block').innerHTML = '';
+      $('summary-block').style.display = '';
+      phasesSection.style.display = '';
+      leveltableSection.style.display = '';
+
+      const p = result.params;
+      const isMage = input.classData.mainStat === 'INT';
+      const nxCost = result.apResets * NX_PER_AP_RESET;
+      const days = Math.ceil(nxCost / MAX_NX_PER_DAY_PER_ACCOUNT);
+
+      const mainStat = input.classData.mainStat;
+
+      const summaryHTML = `
+        <div>
+          <div class="stat-line">
+            <span class="stat-label">Target Base INT</span>
+            <span class="stat-value">${fmt(p.targetBaseInt)}</span>
+          </div>
+          <div class="stat-line">
+            <span class="stat-label">Start MP Wash at</span>
+            <span class="stat-value">lvl ${p.mpWashStart}</span>
+          </div>
+          <div class="stat-line">
+            <span class="stat-label">Stop MP Wash at</span>
+            <span class="stat-value">lvl ${p.mpWashStop}</span>
+          </div>
+          <div class="stat-line">
+            <span class="stat-label">Final HP at lvl ${input.goals.targetLevel}</span>
+            <span class="stat-value">${fmt(result.finalHP)}</span>
+          </div>
+          <div class="stat-line">
+            <span class="stat-label">Final MP at lvl ${input.goals.targetLevel}</span>
+            <span class="stat-value">${fmt(result.finalMP)}</span>
+          </div>
+        </div>
+        <div>
+          <div class="stat-line">
+            <span class="stat-label">Total AP Resets</span>
+            <span class="stat-value feature" id="anim-ap">${fmt(result.apResets)}</span>
+          </div>
+          <div class="stat-line">
+            <span class="stat-label">NX Cost</span>
+            <span class="stat-value feature" id="anim-nx">${fmt(nxCost)}<span class="unit">NX</span></span>
+          </div>
+          <div class="stat-line">
+            <span class="stat-label">Days at 6,500 NX / day</span>
+            <span class="stat-value" id="anim-days">${fmt(days)}<span style="font-family:'Inter Tight'; font-size: 12px; color: var(--text-mute); margin-left: 6px;">one account</span></span>
+          </div>
+        </div>
+      `;
+      $('summary-grid').innerHTML = summaryHTML;
+
+      const apEl = $('anim-ap');
+      const nxEl = $('anim-nx');
+      const daysEl = $('anim-days');
+      // We need the leading text node for animation; ensure it's there.
+      if (apEl) {
+        apEl.firstChild ? animateNumber(apEl, 0, result.apResets) : (apEl.textContent = fmt(result.apResets));
+      }
+      if (nxEl) {
+        // nxEl has a unit child; animate the leading text node only
+        animateNumberText(nxEl, 0, nxCost);
+      }
+      if (daysEl) {
+        animateNumberText(daysEl, 0, days);
+      }
+
+      const breakdownEntries = Object.entries(result.breakdown)
+        .filter(([, count]) => count > 0)
+        .sort(([, a], [, b]) => b - a);
+      const breakdownHTML = breakdownEntries.map(([key, count]) => {
+        const meta = opLabels[key];
+        const op = meta.op.replace(/STAT/g, mainStat);
+        return `
+          <div class="br-row">
+            <span class="br-count">${fmt(count)}</span>
+            <span class="br-op">${op}</span>
+            <span class="br-desc">${meta.label}</span>
+          </div>
+        `;
+      }).join('');
+      $('breakdown-rows').innerHTML = breakdownHTML || '<div class="br-desc" style="font-family:Fraunces; font-style: italic;">— no AP Resets needed for this build</div>';
+
+      const phases = phasePlan(input.classData, input.currentState, input.goals, result);
+      $('phases-list').innerHTML = phases.map(ph => `
+        <div class="phase">
+          <div class="phase-range">${ph.range}</div>
+          <div class="phase-body">
+            <span class="phase-name">${ph.phase}</span>
+            <span class="phase-action">${ph.action.replace(/\+([A-Z]+)\b/g, '+<span style="color: var(--amber)">$1</span>')}</span>
+          </div>
+        </div>
+      `).join('');
+
+      const rows = levelTable(input.classData, input.currentState, input.goals, input.gearInt, input.mwMultiplier, result);
+      $('leveltable-count').textContent = `(${rows.length} levels)`;
+      const phaseChangedSet = new Set();
+      let prevPhase = null;
+      rows.forEach(r => {
+        if (r.phase !== prevPhase) phaseChangedSet.add(r.level);
+        prevPhase = r.phase;
+      });
+      const body = rows.map(r => {
+        const boundary = phaseChangedSet.has(r.level) ? 'boundary' : '';
+        return `<tr class="${boundary}">
+          <td>${r.level}</td>
+          <td>${fmt(r.hp)}</td>
+          <td>${fmt(r.mp)}</td>
+          <td>${fmt(r.baseInt)}</td>
+          <td class="phase-col">${r.phase}</td>
+          <td>${r.resetsThisLevel || ''}</td>
+          <td>${fmt(r.cumulativeResets)}</td>
+        </tr>`;
+      }).join('');
+      $('lt-body').innerHTML = body;
+
+      resultSection.classList.add('shown');
+      phasesSection.classList.add('shown');
+      leveltableSection.classList.add('shown');
+    }
+
+    // Animates only the leading text node (preserves child .unit spans)
+    function animateNumberText(el, start, end, duration = 700) {
+      // ensure there's a leading text node
+      if (!el.firstChild || el.firstChild.nodeType !== Node.TEXT_NODE) {
+        el.insertBefore(document.createTextNode(''), el.firstChild);
+      }
+      const node = el.firstChild;
+      const startTime = performance.now();
+      const tick = (t) => {
+        const elapsed = t - startTime;
+        const progress = Math.min(1, elapsed / duration);
+        const eased = 1 - Math.pow(1 - progress, 3);
+        const current = start + (end - start) * eased;
+        node.textContent = fmt(Math.round(current));
+        if (progress < 1) requestAnimationFrame(tick);
+      };
+      requestAnimationFrame(tick);
+    }
+
+    function runCalc() {
+      const input = readInputs();
+      const result = optimize(input.classData, input.currentState, input.goals, input.gearInt, input.mwMultiplier);
+      renderResult(input, result);
+    }
+
+    classSelect.addEventListener('change', () => {
+      updateMainStatLabel();
+      runCalc();
+    });
+    mwSelect.addEventListener('change', runCalc);
+    document.querySelectorAll('input[type=number]').forEach(el => {
+      el.addEventListener('input', () => {
+        clearTimeout(window.__calcDebounce);
+        window.__calcDebounce = setTimeout(runCalc, 200);
+      });
+    });
+    $('btn-calc').addEventListener('click', runCalc);
+
+    $('leveltable-toggle').addEventListener('click', () => {
+      $('leveltable').classList.toggle('open');
+      $('leveltable-toggle').classList.toggle('open');
+      const isOpen = $('leveltable').classList.contains('open');
+      $('leveltable-toggle').querySelector('.ltlabel').textContent =
+        isOpen ? 'Hide full level table' : 'Show full level table';
+    });
+
+    updateMainStatLabel();
+    runCalc();
   </script>
 </body>
 </html>
