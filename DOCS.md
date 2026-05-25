@@ -1,4 +1,4 @@
-# OrangeWasher
+# MapleWasher
 
 A browser-based calculator for [game name TBD].
 
