@@ -199,7 +199,8 @@ const CLASSES = {
     naturalMPPerLevel: 23,
     freshAPHP: 8,
     staleAPHP: 6,
-    freshAPMPBase: 18,
+    // With MaxMP skill maxed (always-assumed). Without MaxMP would be 18; the +10 is the MaxMP bonus on AP allocations.
+    freshAPMPBase: 28,
     mpLossPerReset: 30,
     minMPFormula: (L) => 22 * L + 449,
     maxHPBonusPerLevel: 0,

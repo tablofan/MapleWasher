@@ -59,6 +59,29 @@ function minMPAtLevel(classData, level) {
   return Math.max(0, classData.minMPFormula(level));
 }
 
+// Per Nise's compilation. (Beginner: 12·L+50, Mage 2nd+: 10·L+64, etc.)
+function minHPAtLevel(classData, level) {
+  // Approximate using the natural HP path from level 1 with no wash gains — close enough for V1.
+  // The exact formulas vary by sub-class (e.g. Fighter 24·L+472 vs Page/Spearman 24·L+172). We use the class's main path.
+  const isMage = classData.mainStat === 'INT';
+  const ja1 = firstJALevel(classData);
+  if (level <= ja1) return 12 * level + 50;
+  // Use natural HP coefficient as the minimum per-level rate.
+  const base = STARTING_HP + (ja1 - 1) * BEGINNER_HP_PER_LEVEL;
+  // For Beginners-only no JA bonus added; for class characters add 1st JA mid-range avg.
+  let minHP = base + (classData.jaBonuses[0]?.hp || 0);
+  for (let L = ja1 + 1; L <= level; L++) {
+    minHP += classData.naturalHPPerLevel;
+  }
+  for (const ja of classData.jaBonuses.slice(1)) {
+    if (ja.level <= level) minHP += ja.hp;
+  }
+  return minHP;
+}
+
+const MAX_HP = 30000;
+const MAX_MP = 30000;
+
 // Sum of (avgInt/10) MP contributions over levels [fromLevel+1 .. toLevel],
 // where Base INT varies linearly between startInt and endInt across that range.
 // Also multiplied by the Maple Warrior multiplier.
@@ -142,52 +165,69 @@ function evaluateStrategy(classData, currentState, goals, gearInt, mwMultiplier,
   // From mpWashStop to targetLevel: INT = targetBaseInt for non-Mages (only resets at targetLevel itself), or = targetBaseInt for Mages.
   const mpFromInt_phase3 = intMPContribution(mpWashStop, goals.targetLevel, targetBaseInt, targetBaseInt, gearInt, mwMultiplier);
 
-  // MP gained from MP-wash cycles in phase 2: 5 resets per level × (avgInt/10 - deficit)
-  // where avgInt is per-level, but for simplicity use avg across phase
+  // MP gained from MP-wash cycles in phase 2.
+  // Nise: "MP Gained from Fresh AP: <base> + base INT/10" — Base INT only, not Gear INT.
+  // Net MP per cycle = (freshAPMPBase + Base INT/10) - mpLossPerReset = Base INT/10 - deficit.
+  // Krythan's MP-wash formula likewise omits Gear INT and Maple Warrior here.
   const phase2AvgInt = (phase1EndInt + targetBaseInt) / 2;
-  const totalIntForCycle_phase2build = (phase2AvgInt + gearInt);
-  const totalIntForCycle_phase2plateau = (targetBaseInt + gearInt);
-  // MP gained per fresh AP into MP: freshAPMPBase + Total INT/10 (rounded down) × MW multiplier
-  // (Per Krythan's M35 formula: ROUNDDOWN((K*MW + L)/10, 0) where K=Base INT, L=Gear INT)
-  // Net MP per wash cycle = freshAPMPBase + INT contribution - mpLossPerReset
-  const netMPPerCycle_phase2build = classData.freshAPMPBase + Math.floor(totalIntForCycle_phase2build * mwMultiplier / 10) * mwMultiplier - classData.mpLossPerReset;
-  const netMPPerCycle_phase2plateau = classData.freshAPMPBase + Math.floor(totalIntForCycle_phase2plateau * mwMultiplier / 10) * mwMultiplier - classData.mpLossPerReset;
-
-  // Simpler approximation matching Krythan: (INT/10 - deficit) × 5 per level, where deficit = mpLossPerReset - freshAPMPBase
   const deficit = classData.mpLossPerReset - classData.freshAPMPBase;
-  const mpFromMPWashBuild = phase2BuildLevels * 5 * (Math.floor(phase2AvgInt * mwMultiplier / 10) + Math.floor(gearInt / 10) - deficit);
-  const mpFromMPWashPlateau = phase2PlateauLevels * 5 * (Math.floor(targetBaseInt * mwMultiplier / 10) + Math.floor(gearInt / 10) - deficit);
+  const mpFromMPWashBuild = phase2BuildLevels * 5 * (Math.floor(phase2AvgInt / 10) - deficit);
+  const mpFromMPWashPlateau = phase2PlateauLevels * 5 * (Math.floor(targetBaseInt / 10) - deficit);
 
   // Phase 3 fresh HP washes cost MP via the -MP +MainStat reset
   const mpFromPhase3Resets = -phase3FreshHPResets * classData.mpLossPerReset;
 
   // --- Assemble totals at end of phase 3 (before final stale HP wash) ---
   const hpEndPhase3 = currentState.hp + hpFromNatural + hpFromJA + hpFromPhase3Fresh;
-  const mpEndPhase3 = currentState.mp + mpFromNatural + mpFromJA
+  const mpEndPhase3Raw = currentState.mp + mpFromNatural + mpFromJA
     + mpFromInt_phase1 + mpFromInt_phase2build + mpFromInt_phase2plateau + mpFromInt_phase3
     + mpFromMPWashBuild + mpFromMPWashPlateau
     + mpFromPhase3Resets;
+
+  // Hard 30k MP cap — game enforces this. Strategies that would overshoot are wasteful, not feasible.
+  if (mpEndPhase3Raw > MAX_MP) {
+    return { feasible: false, reason: `Plan overshoots the 30,000 MP cap (would reach ${Math.round(mpEndPhase3Raw)})` };
+  }
+  if (hpEndPhase3 > MAX_HP) {
+    return { feasible: false, reason: `Plan overshoots the 30,000 HP cap (would reach ${Math.round(hpEndPhase3)})` };
+  }
+  const mpEndPhase3 = mpEndPhase3Raw;
+
+  // Min MP at the MP-wash-start moment (MP must already be ≥ Min MP there or the strategy is broken)
+  const mpAtMPWashStart = currentState.mp + cumulativeNaturalMPBase(classData, currentState.level, mpWashStart)
+    + jaMPBonusInRange(classData, currentState.level, mpWashStart)
+    + mpFromInt_phase1;
+  const minMPAtStart = minMPAtLevel(classData, mpWashStart);
+  if (mpAtMPWashStart < minMPAtStart) {
+    return { feasible: false, reason: `MP at lvl ${mpWashStart} (${Math.round(mpAtMPWashStart)}) would be below Min MP (${minMPAtStart})` };
+  }
 
   // --- Final cleanup at targetLevel: reset INT + stale HP wash ---
   // INT reset cost (non-Mage only)
   const intResetAPResets = isMage ? 0 : Math.max(0, targetBaseInt - STARTING_MAIN_STAT);
 
-  // Stale HP wash to fill HP gap
+  // Stale HP wash to fill HP gap. We compute the exact resets needed to hit hpGoal — but the actual HP
+  // gain is bounded by the 30k cap (any overshoot is wasted by the game).
   const hpGap = Math.max(0, goals.hpGoal - hpEndPhase3);
   const staleHPWashAPResets = hpGap > 0 ? Math.ceil(hpGap / classData.staleAPHP) : 0;
   const mpCostStaleHPWash = staleHPWashAPResets * classData.mpLossPerReset;
 
-  // Final HP & MP
-  const finalHP = hpEndPhase3 + staleHPWashAPResets * classData.staleAPHP;
+  // Final HP: cap at MAX_HP (game enforces this). The few wasted HP from ceil() are acceptable.
+  let finalHP = Math.min(MAX_HP, hpEndPhase3 + staleHPWashAPResets * classData.staleAPHP);
   const finalMP = mpEndPhase3 - mpCostStaleHPWash;
 
   // Min MP check at targetLevel
   const minMPAtTarget = minMPAtLevel(classData, goals.targetLevel);
   if (finalMP < minMPAtTarget) {
-    return { feasible: false, reason: 'MP would go below Min MP at target level' };
+    return { feasible: false, reason: `Final MP (${Math.round(finalMP)}) would be below Min MP (${minMPAtTarget}) at lvl ${goals.targetLevel}` };
   }
   if (finalMP < goals.mpGoal) {
     return { feasible: false, reason: 'MP Goal not reached' };
+  }
+  // Min HP at target level
+  const minHPAtTarget = minHPAtLevel(classData, goals.targetLevel);
+  if (finalHP < minHPAtTarget) {
+    return { feasible: false, reason: `Final HP (${Math.round(finalHP)}) would be below Min HP (${minHPAtTarget}) at lvl ${goals.targetLevel}` };
   }
 
   // Total AP Resets
@@ -248,9 +288,9 @@ function optimize(classData, currentState, goals, gearInt, mwMultiplier) {
     const maxShiftForThisInt = Math.min(maxShiftAvailable, totalIntNeededViaShiftPlusFresh);
 
     for (let shift = minShiftNeeded; shift <= maxShiftForThisInt; shift += Math.max(1, Math.floor((maxShiftForThisInt - minShiftNeeded) / 10) || 1)) {
-      // Phase 1 length is determined: from currentLevel to (currentLevel + (targetBaseInt - currentBaseInt - shift) / 5)
-      // But MP Wash can start earlier than this — try a few options.
-      const naturalMPWashStart = currentState.level + Math.ceil((targetBaseInt - currentState.baseInt - shift) / 5);
+      // Phase 1 ends at the level where (currentBaseInt + shift) + 5*(phase1Levels) ≤ targetBaseInt.
+      // Use floor so we don't overshoot (the last 1-4 INT can come from phase-2 AP Resets).
+      const naturalMPWashStart = currentState.level + Math.floor((targetBaseInt - currentState.baseInt - shift) / 5);
 
       // Try mpWashStart at naturalMPWashStart (no overlap) and a few earlier values (with overlap).
       // For V1 we use only the natural start (simpler model). Overlap optimization can be V2.
