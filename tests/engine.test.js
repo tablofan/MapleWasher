@@ -32,6 +32,8 @@ const exportList = [
   'MAX_HP', 'MAX_MP',
   'optimize', 'evaluateStrategy', 'phasePlan', 'levelTable',
   'minMPAtLevel', 'minHPAtLevel', 'prepareInputs',
+  'runPhase1', 'runPhase2', 'runPhase3', 'runCleanup',
+  'washCycleMP', 'freshHPWashYield', 'staleHPWashYield', 'washCycleMPCost',
 ];
 fs.writeFileSync(tmpModule, classesSrc + '\n' + engineSrc + '\n' + `module.exports = { ${exportList.join(', ')} };`);
 process.on('exit', () => { try { fs.unlinkSync(tmpModule); } catch {} });
@@ -414,6 +416,69 @@ describe('Infeasibility detection', () => {
     const r = plan({ class: 'Magician', goals: { hpGoal: 2000, mpGoal: 5000, targetLevel: 180 } });
     assertFeasible(r);
     assertTrue(r.params.mpEndPhase3 <= 30000, 'mpEndPhase3 must respect 30k cap');
+  });
+});
+
+// ────────────────────────── wash-math primitives ──────────────────────────
+
+describe('Wash-math primitives', () => {
+  test('washCycleMP for NL at INT 200 = 28 - 12 = 8 MP per cycle', () => {
+    // NL: freshAPMPBase=10, mpLossPerReset=12 → deficit=2. floor(200/10) - 2 = 18.
+    assertEq(mod.washCycleMP(CLASSES['Night Lord'], 200), 18);
+  });
+  test('washCycleMP for Mage at INT 300 = floor(30) - 2 = 28', () => {
+    // Mage: freshAPMPBase=28, mpLossPerReset=30 → deficit=2. floor(300/10) - 2 = 28.
+    assertEq(mod.washCycleMP(CLASSES['Magician'], 300), 28);
+  });
+  test('freshHPWashYield for Hero (52 HP per fresh AP) × 10 = 520', () => {
+    assertEq(mod.freshHPWashYield(CLASSES['Hero'], 10), 520);
+  });
+  test('staleHPWashYield for Mage (6 HP per reset) × 100 = 600', () => {
+    assertEq(mod.staleHPWashYield(CLASSES['Magician'], 100), 600);
+  });
+  test('washCycleMPCost for NL (12 MP per reset) × 50 = 600', () => {
+    assertEq(mod.washCycleMPCost(CLASSES['Night Lord'], 50), 600);
+  });
+});
+
+// ────────────────────────── phase steps in isolation ──────────────────────────
+
+describe('Phase steps in isolation', () => {
+  test('runPhase1 builds INT from currentBaseInt+shift to phase1EndInt over fresh AP', () => {
+    const cur = { level: 4, hp: 50, mp: 5, str: 4, dex: 4, luk: 4, baseInt: 4 };
+    const params = { mpWashStart: 14, shift: 0, targetBaseInt: 100 };  // 10 levels of Phase 1
+    const p1 = mod.runPhase1(CLASSES['Night Lord'], cur, params, 0, 1.0);
+    // Phase 1 = 10 levels × 5 fresh AP = +50 INT. End INT = 4 + 50 = 54.
+    assertEq(p1.startBaseInt, 4);
+    assertEq(p1.phase1EndInt, 54);
+    assertTrue(p1.mpFromInt >= 0, 'INT-driven MP is non-negative');
+  });
+  test('runPhase2 produces 5 AP Resets per level', () => {
+    const params = { mpWashStart: 60, mpWashStop: 145, targetBaseInt: 300 };
+    const phase1 = { phase1EndInt: 300 };  // already at target, plateau-only Phase 2
+    const p2 = mod.runPhase2(CLASSES['Night Lord'], params, phase1, 40, 1.0);
+    assertEq(p2.phase2APResets, (145 - 60) * 5);
+    assertEq(p2.intResetsInPhase2, 0, 'INT already at target');
+    assertEq(p2.phase2PlateauLevels, 145 - 60, 'all Phase 2 is plateau');
+  });
+  test('runPhase3 with both fresh and stale wash combines yields', () => {
+    const params = { mpWashStop: 145, targetBaseInt: 300, freshHPPerLevelPhase3: 3, staleHPPerLevelPhase3: 2 };
+    const goals = { hpGoal: 30000, mpGoal: 5000, targetLevel: 180 };
+    const p3 = mod.runPhase3(CLASSES['Night Lord'], params, goals, 40, 1.0);
+    assertEq(p3.phase3FreshHPResets, 35 * 3);  // 35 levels × 3 fresh per level
+    assertEq(p3.phase3StaleHPResets, 35 * 2);  // 35 levels × 2 stale per level
+    // NL freshAPHP=18, staleAPHP=16. Fresh yield = 105*18 = 1890. Stale yield = 70*16 = 1120.
+    assertEq(p3.hpFromFresh, 105 * 18);
+    assertEq(p3.hpFromStale, 70 * 16);
+  });
+  test('runCleanup fills HP gap with stale wash; skips INT reset for Mages', () => {
+    const goals = { hpGoal: 5000, mpGoal: 4000, targetLevel: 180 };
+    const mageCleanup = mod.runCleanup(CLASSES['Magician'], 2000, 10000, goals, 300);
+    assertEq(mageCleanup.intResetAPResets, 0, 'Mage skips INT reset');
+    // HP gap 3000 / staleAPHP 6 = 500 stale resets
+    assertEq(mageCleanup.cleanupStaleHPWash, 500);
+    const nlCleanup = mod.runCleanup(CLASSES['Night Lord'], 2000, 10000, goals, 300);
+    assertEq(nlCleanup.intResetAPResets, 300 - 4, 'NL resets INT back to 4');
   });
 });
 
