@@ -13,28 +13,30 @@
 // reasonable user choices, not on a single fixed number.
 
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
 
 const ROOT = path.resolve(__dirname, '..');
 const classesSrc = fs.readFileSync(path.join(ROOT, 'classes.js'), 'utf-8');
 const engineSrc = fs.readFileSync(path.join(ROOT, 'engine.js'), 'utf-8');
 
-// Evaluate both files and re-export their `const` bindings onto globalThis so
-// the rest of this test module can reach them. (Plain `eval` doesn't expose
-// `const` to the caller's module scope, but function declarations DO hoist into
-// the module scope. We expose the consts via Object.assign(globalThis, …) and
-// reach the functions directly.)
-eval(classesSrc + '\n' + engineSrc + '\n' + `
-  Object.assign(globalThis, {
-    CLASSES, CLASS_ORDER, MAPLE_WARRIOR_LEVELS,
-    BEGINNER_HP_PER_LEVEL, BEGINNER_MP_PER_LEVEL,
-    STARTING_HP, STARTING_MP, STARTING_MAIN_STAT,
-    NX_PER_AP_RESET, MAX_NX_PER_DAY_PER_ACCOUNT,
-    MAX_HP, MAX_MP,
-  });
-`);
-const CLASSES = globalThis.CLASSES;
-const CLASS_ORDER = globalThis.CLASS_ORDER;
+// Load via a tmp CommonJS module so V8 JIT-optimises the hot loops the same way it does
+// for normal require()'d code. (Top-level `eval` keeps the eval'd code in interpreted mode
+// indefinitely, which is ~5× slower for the brute-force optimizer.)
+const tmpModule = path.join(os.tmpdir(), `maplewasher-test-${process.pid}.js`);
+const exportList = [
+  'CLASSES', 'CLASS_ORDER', 'MAPLE_WARRIOR_LEVELS',
+  'BEGINNER_HP_PER_LEVEL', 'BEGINNER_MP_PER_LEVEL',
+  'STARTING_HP', 'STARTING_MP', 'STARTING_MAIN_STAT',
+  'NX_PER_AP_RESET', 'MAX_NX_PER_DAY_PER_ACCOUNT',
+  'MAX_HP', 'MAX_MP',
+  'optimize', 'evaluateStrategy', 'phasePlan', 'levelTable',
+  'minMPAtLevel', 'minHPAtLevel',
+];
+fs.writeFileSync(tmpModule, classesSrc + '\n' + engineSrc + '\n' + `module.exports = { ${exportList.join(', ')} };`);
+process.on('exit', () => { try { fs.unlinkSync(tmpModule); } catch {} });
+const mod = require(tmpModule);
+const { CLASSES, CLASS_ORDER, optimize, phasePlan, levelTable } = mod;
 
 // ────────────────────────── tiny harness ──────────────────────────
 
@@ -42,10 +44,13 @@ let passed = 0, failed = 0;
 const failures = [];
 
 function test(name, fn) {
+  const t0 = Date.now();
   try {
     fn();
+    const ms = Date.now() - t0;
     passed++;
-    console.log('  \x1b[32m✓\x1b[0m ' + name);
+    const tag = ms > 1000 ? ` (${ms}ms)` : '';
+    console.log('  \x1b[32m✓\x1b[0m ' + name + tag);
   } catch (err) {
     failed++;
     failures.push({ name, err });
@@ -90,7 +95,10 @@ function plan(opts) {
   const goals = Object.assign({ hpGoal: 30000, mpGoal: 5000, targetLevel: 180 }, opts.goals || {});
   const gearInt = opts.gearInt ?? 40;
   const mwMultiplier = opts.mwMultiplier ?? 1.0;
-  return optimize(classData, currentState, goals, gearInt, mwMultiplier);
+  const r = optimize(classData, currentState, goals, gearInt, mwMultiplier);
+  // Stash the className back into the result for tests that need it.
+  if (r && r.params) r.params.className = opts.class;
+  return r;
 }
 
 // ────────────────────────── reference cases ──────────────────────────
@@ -102,8 +110,9 @@ describe('Reference cases (Krythan-aligned)', () => {
     assertFeasible(r);
     assertEq(r.finalHP, 30000, 'HP at cap');
     assertTrue(r.finalMP >= 5000, 'MP meets goal');
-    assertInRange(r.apResets, 1900, 2500, 'AP Resets near Krythan default');
-    assertInRange(r.params.targetBaseInt, 200, 700, 'Target Base INT in plausible range');
+    // Krythan's NL sheet defaults give ~2121 AP Resets; tightened from 1900-2500.
+    assertInRange(r.apResets, 2000, 2400, 'AP Resets within ±10% of Krythan default ~2121');
+    assertInRange(r.params.targetBaseInt, 300, 600, 'Target Base INT in Krythan-style range');
   });
 
   test('Hero (Warrior) fresh start to 30k HP / 2k MP at lvl 180', () => {
@@ -111,8 +120,8 @@ describe('Reference cases (Krythan-aligned)', () => {
     assertFeasible(r);
     assertEq(r.finalHP, 30000);
     assertTrue(r.finalMP >= 2000);
-    // Warriors use fresh HP wash (52 HP/AP). 30k / 52 ≈ 580 cycles plus base-int reset.
-    assertInRange(r.apResets, 350, 700, 'Warrior AP Resets in Krythan-style range');
+    // Warriors use fresh HP wash (52 HP/AP). Krythan's Warrior sheet gives ~470 resets.
+    assertInRange(r.apResets, 400, 550, 'Warrior AP Resets near Krythan default ~470');
   });
 
   test('Magician fresh start to 5k HP / 10k MP at lvl 180', () => {
@@ -124,21 +133,136 @@ describe('Reference cases (Krythan-aligned)', () => {
   });
 });
 
+describe('Maple Warrior multiplier', () => {
+  const baseInputs = {
+    class: 'Night Lord',
+    goals: { hpGoal: 30000, mpGoal: 5000, targetLevel: 180 },
+  };
+  test('MW30 plan uses no more AP Resets than MW0', () => {
+    const mw0 = plan(Object.assign({}, baseInputs, { mwMultiplier: 1.00 }));
+    const mw30 = plan(Object.assign({}, baseInputs, { mwMultiplier: 1.15 }));
+    assertFeasible(mw0);
+    assertFeasible(mw30);
+    // MW boosts natural MP gain from INT, so the optimizer can use a lower Target Base INT for
+    // the same MP goal — fewer total resets (or at least no worse).
+    assertTrue(mw30.apResets <= mw0.apResets, `MW30 (${mw30.apResets}) should be ≤ MW0 (${mw0.apResets})`);
+  });
+  test('MW20 is between MW0 and MW30', () => {
+    const mw0  = plan(Object.assign({}, baseInputs, { mwMultiplier: 1.00 }));
+    const mw20 = plan(Object.assign({}, baseInputs, { mwMultiplier: 1.10 }));
+    const mw30 = plan(Object.assign({}, baseInputs, { mwMultiplier: 1.15 }));
+    assertTrue(mw20.apResets <= mw0.apResets);
+    assertTrue(mw30.apResets <= mw20.apResets);
+  });
+});
+
+describe('Mid-progress shift mechanic', () => {
+  test('Mid-progress with low INT and high Main Stat picks a positive shift when beneficial', () => {
+    // Lvl 100 Night Lord with LUK 400 but only 4 Base INT — should convert some LUK→INT.
+    const r = plan({
+      class: 'Night Lord',
+      current: { level: 100, hp: 4000, mp: 1500, baseInt: 4, mainStat: 400 },
+      goals: { hpGoal: 30000, mpGoal: 5000, targetLevel: 180 },
+    });
+    if (r.feasible) {
+      // Shift should be non-zero AND in the 'up' direction (Main Stat → INT).
+      assertTrue(r.breakdown.shift > 0, 'shift should be > 0');
+      assertEq(r.breakdown.shiftDir, 'up', 'shift direction should be `up`');
+    }
+  });
+  test('Mid-progress with over-built INT picks a negative shift when target INT is lower', () => {
+    // Lvl 100 Night Lord with way too much Base INT — the optimizer can choose to reduce it.
+    const r = plan({
+      class: 'Night Lord',
+      current: { level: 100, hp: 4000, mp: 8000, baseInt: 800, mainStat: 4 },
+      goals: { hpGoal: 30000, mpGoal: 5000, targetLevel: 180 },
+    });
+    if (r.feasible && r.params.targetBaseInt < 800) {
+      assertEq(r.breakdown.shiftDir, 'down', 'shift direction should be `down`');
+    }
+  });
+});
+
+describe('phasePlan output shape', () => {
+  test('Night Lord plan emits Build Base INT → MP Wash → Stale HP Wash → Reset Base INT', () => {
+    const r = plan({ class: 'Night Lord', goals: { hpGoal: 30000, mpGoal: 5000, targetLevel: 180 } });
+    assertFeasible(r);
+    const phases = phasePlan(r.params && CLASSES[r.params.className || 'Night Lord'] || CLASSES['Night Lord'], { level: 1, hp: 50, mp: 5, baseInt: 4, mainStat: 4 }, { hpGoal: 30000, mpGoal: 5000, targetLevel: 180 }, r);
+    const phaseNames = phases.map(p => p.phase);
+    assertTrue(phaseNames.includes('Build Base INT'), 'has Build Base INT phase');
+    assertTrue(phaseNames.includes('MP Wash'), 'has MP Wash phase');
+    assertTrue(phaseNames.includes('Reset Base INT'), 'has Reset Base INT phase');
+  });
+  test('Magician plan does not have a Reset Base INT phase', () => {
+    const r = plan({ class: 'Magician', goals: { hpGoal: 5000, mpGoal: 10000, targetLevel: 180 } });
+    assertFeasible(r);
+    const phases = phasePlan(CLASSES['Magician'], { level: 1, hp: 50, mp: 5, baseInt: 4, mainStat: 4 }, { hpGoal: 5000, mpGoal: 10000, targetLevel: 180 }, r);
+    const phaseNames = phases.map(p => p.phase);
+    assertTrue(!phaseNames.includes('Reset Base INT'), 'Mages should not Reset Base INT');
+  });
+});
+
+describe('levelTable output', () => {
+  test('Has one row per level from current to target inclusive', () => {
+    const r = plan({ class: 'Night Lord', goals: { hpGoal: 30000, mpGoal: 5000, targetLevel: 180 } });
+    assertFeasible(r);
+    const rows = levelTable(CLASSES['Night Lord'], { level: 1, hp: 50, mp: 5, baseInt: 4, mainStat: 4 }, { hpGoal: 30000, mpGoal: 5000, targetLevel: 180 }, 40, 1.0, r);
+    assertEq(rows.length, 180, '180 rows for levels 1-180');
+    assertEq(rows[0].level, 1);
+    assertEq(rows[rows.length - 1].level, 180);
+  });
+  test('Cumulative AP Resets monotone non-decreasing', () => {
+    const r = plan({ class: 'Night Lord', goals: { hpGoal: 30000, mpGoal: 5000, targetLevel: 180 } });
+    assertFeasible(r);
+    const rows = levelTable(CLASSES['Night Lord'], { level: 1, hp: 50, mp: 5, baseInt: 4, mainStat: 4 }, { hpGoal: 30000, mpGoal: 5000, targetLevel: 180 }, 40, 1.0, r);
+    for (let i = 1; i < rows.length; i++) {
+      assertTrue(rows[i].cumulativeResets >= rows[i-1].cumulativeResets, `non-decreasing at row ${i}`);
+    }
+  });
+  test('HP is monotone non-decreasing across levels', () => {
+    const r = plan({ class: 'Night Lord', goals: { hpGoal: 30000, mpGoal: 5000, targetLevel: 180 } });
+    assertFeasible(r);
+    const rows = levelTable(CLASSES['Night Lord'], { level: 1, hp: 50, mp: 5, baseInt: 4, mainStat: 4 }, { hpGoal: 30000, mpGoal: 5000, targetLevel: 180 }, 40, 1.0, r);
+    for (let i = 1; i < rows.length; i++) {
+      assertTrue(rows[i].hp >= rows[i-1].hp, `HP non-decreasing at row ${i}`);
+    }
+  });
+  test('Final-row HP matches the summary finalHP', () => {
+    const r = plan({ class: 'Night Lord', goals: { hpGoal: 30000, mpGoal: 5000, targetLevel: 180 } });
+    assertFeasible(r);
+    const rows = levelTable(CLASSES['Night Lord'], { level: 1, hp: 50, mp: 5, baseInt: 4, mainStat: 4 }, { hpGoal: 30000, mpGoal: 5000, targetLevel: 180 }, 40, 1.0, r);
+    const lastRow = rows[rows.length - 1];
+    // Allow ±15 HP rounding tolerance (stale wash ceil() can overshoot the goal by up to staleAPHP-1)
+    assertTrue(Math.abs(lastRow.hp - r.finalHP) <= 16, `last row HP ${lastRow.hp} vs summary ${r.finalHP}`);
+  });
+});
+
+describe('Optimizer determinism', () => {
+  test('Same inputs yield identical results on re-run', () => {
+    const inputs = { class: 'Night Lord', goals: { hpGoal: 30000, mpGoal: 5000, targetLevel: 180 } };
+    const r1 = plan(inputs);
+    const r2 = plan(inputs);
+    assertEq(r1.apResets, r2.apResets);
+    assertEq(r1.params.targetBaseInt, r2.params.targetBaseInt);
+    assertEq(r1.params.mpWashStart, r2.params.mpWashStart);
+    assertEq(r1.params.mpWashStop, r2.params.mpWashStop);
+  });
+});
+
 // ────────────────────────── boundary cases ──────────────────────────
 
 describe('Boundary cases', () => {
-  test('Final HP is capped at 30,000 (never overshoots)', () => {
+  test('Final HP equals exactly 30,000 when HP Goal is 30k (cap saturates)', () => {
     const r = plan({ class: 'Night Lord', goals: { hpGoal: 30000, mpGoal: 5000, targetLevel: 180 } });
     assertFeasible(r);
-    assertTrue(r.finalHP <= 30000, 'finalHP must not exceed cap');
+    assertEq(r.finalHP, 30000, 'finalHP must equal the cap');
   });
 
   test('Final MP is capped at 30,000', () => {
-    // Mage with HP goal = natural HP (~2200) and big MP goal — should hit the MP cap.
     const r = plan({ class: 'Magician', goals: { hpGoal: 2200, mpGoal: 25000, targetLevel: 180 } });
-    if (r.feasible) {
-      assertTrue(r.finalMP <= 30000, 'finalMP must not exceed cap');
-    }
+    assertFeasible(r);
+    assertTrue(r.finalMP <= 30000, 'finalMP must not exceed cap');
+    assertTrue(r.params.mpEndPhase3 <= 30000, 'intermediate MP also respects cap');
   });
 
   test('MP Goal exactly at Min MP is feasible', () => {
@@ -153,18 +277,17 @@ describe('Boundary cases', () => {
     assertInfeasible(r, 'target level');
   });
 
-  test('Mid-progress current state is honoured', () => {
-    // Skipping ahead to lvl 100 with some existing HP/MP/INT.
-    const r = plan({
+  test('Mid-progress current state typically costs less than a fresh start', () => {
+    // Mid-progress at lvl 100 with some existing HP/MP/INT should be ≤ fresh-start cost.
+    const fresh = plan({ class: 'Night Lord', goals: { hpGoal: 30000, mpGoal: 5000, targetLevel: 180 } });
+    const mid = plan({
       class: 'Night Lord',
       current: { level: 100, hp: 5000, mp: 3000, baseInt: 200, mainStat: 300 },
       goals: { hpGoal: 30000, mpGoal: 5000, targetLevel: 180 },
     });
-    if (r.feasible) {
-      // Mid-progress should typically need fewer total AP Resets than fresh start.
-      const fresh = plan({ class: 'Night Lord', goals: { hpGoal: 30000, mpGoal: 5000, targetLevel: 180 } });
-      assertTrue(r.apResets <= fresh.apResets * 1.1, 'mid-progress shouldnt explode the cost');
-    }
+    assertFeasible(fresh);
+    assertFeasible(mid);
+    assertTrue(mid.apResets <= fresh.apResets * 1.1, 'mid-progress shouldnt explode the cost');
   });
 });
 
@@ -191,8 +314,33 @@ describe('Infeasibility detection', () => {
     assertInfeasible(r);
   });
 
+  test('HP Goal > 30,000 is rejected upfront', () => {
+    const r = plan({ class: 'Night Lord', goals: { hpGoal: 35000, mpGoal: 5000, targetLevel: 180 } });
+    assertInfeasible(r, '30,000 HP cap');
+  });
+
+  test('MP Goal > 30,000 is rejected upfront', () => {
+    const r = plan({ class: 'Magician', goals: { hpGoal: 5000, mpGoal: 35000, targetLevel: 180 } });
+    assertInfeasible(r, '30,000 MP cap');
+  });
+
+  test('Negative HP Goal is rejected', () => {
+    const r = plan({ class: 'Night Lord', goals: { hpGoal: -1, mpGoal: 5000, targetLevel: 180 } });
+    assertInfeasible(r, '≥ 0');
+  });
+
+  test('Out-of-range Current Level is rejected', () => {
+    const r = plan({ class: 'Night Lord', current: { level: 0 }, goals: { hpGoal: 5000, mpGoal: 3000, targetLevel: 180 } });
+    assertInfeasible(r, 'Current Level');
+  });
+
+  test('Out-of-range Target Level is rejected', () => {
+    const r = plan({ class: 'Night Lord', goals: { hpGoal: 5000, mpGoal: 3000, targetLevel: 250 } });
+    assertInfeasible(r, 'Target Level');
+  });
+
   test('Plans overshooting the 30k MP cap are filtered out', () => {
-    // Indirect: a Mage with very low HP goal and very high INT would overshoot MP cap if not filtered.
+    // A Mage with very low HP goal and very high INT would overshoot MP cap if not filtered.
     // The optimizer should still return *some* feasible plan, just not the overshooting one.
     const r = plan({ class: 'Magician', goals: { hpGoal: 1500, mpGoal: 5000, targetLevel: 180 } });
     if (r.feasible) {

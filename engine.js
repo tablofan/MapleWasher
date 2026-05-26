@@ -111,9 +111,11 @@ function intMPContribution(fromLevel, toLevel, startInt, endInt, gearInt, mwMult
 //   At targetLevel: Stale HP wash (-MP +HP) to fill remaining HP gap, then Reset Base INT (-INT +MainStat) to STARTING_MAIN_STAT (skipped for Mages).
 //
 // Returns { feasible, finalHP, finalMP, apResets, breakdown, params }.
-function evaluateStrategy(classData, currentState, goals, gearInt, mwMultiplier, params) {
+function evaluateStrategy(classData, currentState, goals, gearInt, mwMultiplier, params, ranges) {
   const { targetBaseInt, mpWashStart, mpWashStop, shift, freshHPPerLevelPhase3 } = params;
   const isMage = classData.mainStat === 'INT';
+  // Cached range sums (if not provided, compute lazily).
+  ranges = ranges || precomputeRanges(classData, currentState.level, goals.targetLevel);
 
   // --- Validate input ranges ---
   const startBaseInt = currentState.baseInt + shift;
@@ -154,13 +156,13 @@ function evaluateStrategy(classData, currentState, goals, gearInt, mwMultiplier,
   const phase3FreshHPResets = phase3Levels * freshHPPerLevelPhase3;
 
   // --- HP accumulated through phases (natural, JA, Phase-3 fresh wash) ---
-  const hpFromNatural = cumulativeNaturalHP(classData, currentState.level, goals.targetLevel);
-  const hpFromJA = jaHPBonusInRange(classData, currentState.level, goals.targetLevel);
+  const hpFromNatural = ranges.hpNatural;
+  const hpFromJA = ranges.hpJA;
   const hpFromPhase3Fresh = phase3FreshHPResets * classData.freshAPHP;
 
   // --- MP accumulated ---
-  const mpFromNatural = cumulativeNaturalMPBase(classData, currentState.level, goals.targetLevel);
-  const mpFromJA = jaMPBonusInRange(classData, currentState.level, goals.targetLevel);
+  const mpFromNatural = ranges.mpNaturalBase;
+  const mpFromJA = ranges.mpJA;
   const mpFromInt_phase1     = intMPContribution(currentState.level,  mpWashStart,         startBaseInt,    phase1EndInt,    gearInt, mwMultiplier);
   const mpFromInt_phase2build = intMPContribution(mpWashStart,         phase2BuildEndLevel, phase1EndInt,    targetBaseInt,   gearInt, mwMultiplier);
   const mpFromInt_phase2plateau = intMPContribution(phase2BuildEndLevel, mpWashStop,        targetBaseInt,   targetBaseInt,   gearInt, mwMultiplier);
@@ -253,6 +255,17 @@ function evaluateStrategy(classData, currentState, goals, gearInt, mwMultiplier,
   };
 }
 
+// Precompute level-range quantities that don't depend on strategy choice.
+// (Called once outside the brute-force loop; each saves O(targetLevel) work per evaluation.)
+function precomputeRanges(classData, fromLevel, toLevel) {
+  return {
+    hpNatural: cumulativeNaturalHP(classData, fromLevel, toLevel),
+    mpNaturalBase: cumulativeNaturalMPBase(classData, fromLevel, toLevel),
+    hpJA: jaHPBonusInRange(classData, fromLevel, toLevel),
+    mpJA: jaMPBonusInRange(classData, fromLevel, toLevel),
+  };
+}
+
 // Brute-force search across the parameter space; returns the minimum-AP-Reset feasible plan.
 function optimize(classData, currentState, goals, gearInt, mwMultiplier) {
   // Quick global feasibility prechecks.
@@ -286,6 +299,9 @@ function optimize(classData, currentState, goals, gearInt, mwMultiplier) {
   const remainingLevels = goals.targetLevel - currentState.level;
   const maxPositiveShift = Math.max(0, currentState.mainStat - STARTING_MAIN_STAT);
   const maxNegativeShift = Math.max(0, currentState.baseInt - STARTING_MAIN_STAT);
+
+  // Precompute range sums (these depend only on class + currentLevel + targetLevel, not strategy).
+  const ranges = precomputeRanges(classData, currentState.level, goals.targetLevel);
 
   // Target Base INT range. Allow values BELOW current Base INT (via shift-down).
   const intMin = STARTING_MAIN_STAT;
@@ -341,13 +357,13 @@ function optimize(classData, currentState, goals, gearInt, mwMultiplier) {
       for (const mpWashStart of mpWashStartCandidates) {
         if (mpWashStart < currentState.level || mpWashStart > goals.targetLevel) continue;
 
-        // mpWashStop step 1 for accuracy. Phase 3 freshHPPerLevel: derive optimal analytically
-        // by trying 4 strategic values rather than all 6.
+        // mpWashStop step 1 for accuracy. Phase 3 freshHPPerLevel full sweep [0..5] — needed for
+        // Warriors/Buccaneers where intermediate values (2, 4) are often optimal.
         for (let mpWashStop = mpWashStart; mpWashStop <= goals.targetLevel; mpWashStop++) {
-          for (const freshHPPerLevelPhase3 of [0, 1, 3, 5]) {
+          for (let freshHPPerLevelPhase3 = 0; freshHPPerLevelPhase3 <= 5; freshHPPerLevelPhase3++) {
             const result = evaluateStrategy(classData, currentState, goals, gearInt, mwMultiplier, {
               targetBaseInt, mpWashStart, mpWashStop, shift, freshHPPerLevelPhase3,
-            });
+            }, ranges);
 
             if (result.feasible && result.finalHP >= goals.hpGoal) {
               if (!best || result.apResets < best.apResets) best = result;

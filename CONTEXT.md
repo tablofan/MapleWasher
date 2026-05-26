@@ -88,7 +88,7 @@ When the calculator runs successfully:
 
 1. **Summary card** — `Target Base INT`, `MP Wash Start Level`, `MP Wash Stop Level`, total **AP Resets**, **NX Cost** (= AP Resets × 3,100), **Days-to-Wash** (= NX Cost ÷ 6,500 NX-per-day-per-account), plus a one-line per-reset-type breakdown.
 2. **Phase Plan** — level-banded allocation guide (e.g. "Lvl 4-67 · All fresh AP → INT") matching the **Search space** decisions.
-3. **Level-by-level table** — 7 columns: Level, HP, MP, Base INT, Phase, AP Resets this level, Cumulative AP Resets. Collapsed by default. The Phase column shows one of: *Build Base INT* / *MP Wash* / *Stale HP Wash* / *Fresh HP Wash* / *Reset Base INT* / *Done*.
+3. **Level-by-level table** — 7 columns: Level, HP, MP, Base INT, Phase, AP Resets this level, Cumulative AP Resets. Collapsed by default. The Phase column shows one of: *Build Base INT* / *MP Wash* / *Stale HP Wash* / *Fresh HP Wash* / *Build &lt;Main Stat&gt;* / *Reset Base INT* / *Stale HP Wash + Reset INT* (combined at target level when both apply) / *Done*.
 
 When the user's inputs make the goal **infeasible** (e.g. Mage requesting 30k HP at lvl 50), the calculator shows an **infeasibility warning** in place of the Summary, naming the violated constraint (`HP Goal exceeds maximum possible at Target Level` / `MP Goal below Minimum MP at Target Level`).
 
@@ -120,4 +120,4 @@ Differences from MapleWasher's scope: Krythan's sheets include HP Challenges col
 
 ## Flagged ambiguities
 
-*(none yet)*
+- UI phrasing of the **MP Wash Start Level** and **MP Wash Stop Level** terms drops the word "Level" — the labels read "Start MP Wash at" / "Stop MP Wash at" because they're followed by a level value (`lvl 68`). Both forms refer to the same concept.
