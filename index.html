@@ -13,16 +13,16 @@
       --bg-grain: #1d1814;
       --surface: #221c17;
       --surface-2: #2a221b;
-      --line: #3a2f25;
-      --line-soft: #2c241d;
-      --text: #ece1cc;
-      --text-2: #c7b69d;
-      --text-mute: #8a7866;
-      --text-faint: #5e4f42;
-      --maple: #c8533b;
-      --maple-glow: rgba(200, 83, 59, 0.18);
-      --amber: #d4a24f;
-      --moss: #7d9468;
+      --line: #4a3d2f;
+      --line-soft: #34291f;
+      --text: #f5ecd9;
+      --text-2: #e0d2b9;
+      --text-mute: #b2a08c;
+      --text-faint: #877766;
+      --maple: #d65d44;
+      --maple-glow: rgba(214, 93, 68, 0.2);
+      --amber: #e6b260;
+      --moss: #8aa674;
       --clay: #c19370;
     }
 
@@ -81,25 +81,25 @@
     .tagline {
       font-family: 'Fraunces', serif;
       font-style: italic;
-      font-weight: 300;
-      font-size: 15px;
-      color: var(--text-mute);
-      padding-left: 4px;
+      font-weight: 400;
+      font-size: 15.5px;
+      color: var(--text-2);
+      padding-left: 14px;
       border-left: 1px solid var(--line);
-      margin-left: 4px;
+      margin-left: 6px;
       padding-block: 4px 6px;
     }
 
     .meta-line {
       font-family: 'JetBrains Mono', monospace;
-      font-size: 11px;
+      font-size: 11.5px;
       letter-spacing: 0.18em;
       text-transform: uppercase;
-      color: var(--text-faint);
+      color: var(--text-mute);
       margin-bottom: 56px;
     }
     .meta-line a {
-      color: var(--text-mute);
+      color: var(--text-2);
       text-decoration: none;
       border-bottom: 1px dotted var(--line);
     }
@@ -116,18 +116,18 @@
     .section-num {
       font-family: 'Fraunces', serif;
       font-style: italic;
-      font-weight: 300;
-      font-size: 14px;
+      font-weight: 400;
+      font-size: 15px;
       color: var(--maple);
       letter-spacing: 0.02em;
     }
     .section-title {
       font-family: 'Inter Tight', sans-serif;
-      font-weight: 500;
-      font-size: 11px;
+      font-weight: 600;
+      font-size: 11.5px;
       letter-spacing: 0.28em;
       text-transform: uppercase;
-      color: var(--text-mute);
+      color: var(--text-2);
     }
     .section-rule {
       flex: 1;
@@ -139,16 +139,18 @@
     .group-label {
       font-family: 'Fraunces', serif;
       font-style: italic;
-      font-weight: 300;
-      font-size: 18px;
-      color: var(--text-2);
+      font-weight: 400;
+      font-size: 19px;
+      color: var(--text);
       margin-bottom: 12px;
       letter-spacing: -0.01em;
     }
     .group-label .nb {
       font-style: normal;
-      color: var(--text-faint);
-      font-size: 13px;
+      color: var(--text-mute);
+      font-size: 13.5px;
+      font-family: 'Inter Tight', sans-serif;
+      font-weight: 400;
     }
     .field-grid {
       display: grid;
@@ -165,11 +167,12 @@
     .field:focus-within { border-color: var(--maple); }
     .field label {
       font-family: 'Inter Tight', sans-serif;
-      font-size: 10px;
+      font-size: 10.5px;
+      font-weight: 500;
       letter-spacing: 0.16em;
       text-transform: uppercase;
-      color: var(--text-mute);
-      margin-bottom: 4px;
+      color: var(--text-2);
+      margin-bottom: 5px;
       transition: color 0.2s ease;
     }
     .field:focus-within label { color: var(--maple); }
@@ -242,10 +245,9 @@
     }
     .btn-calc:hover .arr { transform: translateX(4px); }
     .calc-hint {
-      font-family: 'Fraunces', serif;
-      font-style: italic;
-      font-weight: 300;
-      font-size: 14px;
+      font-family: 'Inter Tight', sans-serif;
+      font-weight: 400;
+      font-size: 13.5px;
       color: var(--text-mute);
     }
 
@@ -276,9 +278,9 @@
     .stat-label {
       font-family: 'Fraunces', serif;
       font-style: italic;
-      font-weight: 300;
+      font-weight: 400;
       font-size: 17px;
-      color: var(--text-2);
+      color: var(--text);
       letter-spacing: -0.005em;
     }
     .stat-value {
@@ -299,11 +301,11 @@
     }
     .stat-value.feature .unit {
       font-family: 'Inter Tight', sans-serif;
-      font-weight: 400;
-      font-size: 12px;
+      font-weight: 500;
+      font-size: 12.5px;
       letter-spacing: 0.18em;
       text-transform: uppercase;
-      color: var(--text-mute);
+      color: var(--text-2);
       margin-left: 8px;
       vertical-align: 4px;
     }
@@ -312,15 +314,15 @@
     .breakdown-title {
       font-family: 'Fraunces', serif;
       font-style: italic;
-      font-weight: 300;
+      font-weight: 400;
       font-size: 17px;
-      color: var(--text-2);
+      color: var(--text);
       margin-bottom: 14px;
     }
     .breakdown-rows { display: grid; gap: 6px; }
     .br-row {
       display: grid;
-      grid-template-columns: 90px 140px 1fr;
+      grid-template-columns: 90px 150px 1fr;
       gap: 18px;
       align-items: baseline;
       padding: 8px 0;
@@ -329,18 +331,17 @@
     }
     .br-count {
       text-align: right;
-      font-weight: 500;
+      font-weight: 600;
       font-size: 15px;
       font-variant-numeric: tabular-nums;
       color: var(--text);
     }
-    .br-op { color: var(--maple); font-size: 13px; }
+    .br-op { color: var(--maple); font-size: 13px; font-weight: 500; }
     .br-desc {
-      font-family: 'Fraunces', serif;
-      font-style: italic;
-      font-weight: 300;
-      color: var(--text-mute);
-      font-size: 15px;
+      font-family: 'Inter Tight', sans-serif;
+      font-weight: 400;
+      color: var(--text-2);
+      font-size: 14.5px;
     }
 
     .phases { display: grid; gap: 16px; }
@@ -353,8 +354,8 @@
     }
     .phase-range {
       font-family: 'JetBrains Mono', monospace;
-      font-weight: 500;
-      font-size: 13px;
+      font-weight: 600;
+      font-size: 13.5px;
       color: var(--maple);
       font-variant-numeric: tabular-nums;
       padding-top: 2px;
@@ -362,23 +363,23 @@
     .phase-body {
       display: flex;
       flex-direction: column;
-      gap: 4px;
+      gap: 6px;
     }
     .phase-name {
       font-family: 'Inter Tight', sans-serif;
-      font-size: 10px;
+      font-size: 10.5px;
+      font-weight: 600;
       letter-spacing: 0.2em;
       text-transform: uppercase;
-      color: var(--text-mute);
+      color: var(--text-2);
     }
     .phase-action {
-      font-family: 'Fraunces', serif;
-      font-weight: 350;
-      font-size: 18px;
+      font-family: 'Inter Tight', sans-serif;
+      font-weight: 400;
+      font-size: 15.5px;
       color: var(--text);
-      font-variation-settings: 'opsz' 24;
-      line-height: 1.4;
-      letter-spacing: -0.005em;
+      line-height: 1.5;
+      letter-spacing: 0;
     }
 
     .leveltable-toggle {
@@ -386,9 +387,10 @@
       display: inline-flex;
       align-items: center;
       gap: 12px;
-      color: var(--text-mute);
+      color: var(--text-2);
       font-family: 'Inter Tight', sans-serif;
-      font-size: 11px;
+      font-size: 11.5px;
+      font-weight: 500;
       letter-spacing: 0.2em;
       text-transform: uppercase;
       background: none;
@@ -424,19 +426,19 @@
       width: 100%;
       border-collapse: collapse;
       font-family: 'JetBrains Mono', monospace;
-      font-size: 12.5px;
+      font-size: 13px;
       font-variant-numeric: tabular-nums;
     }
     table.lt thead th {
       position: sticky;
       top: 0;
       background: var(--surface);
-      color: var(--text-mute);
+      color: var(--text-2);
       font-family: 'Inter Tight', sans-serif;
-      font-size: 9.5px;
+      font-size: 10.5px;
       letter-spacing: 0.18em;
       text-transform: uppercase;
-      font-weight: 500;
+      font-weight: 600;
       text-align: right;
       padding: 12px 14px;
       border-bottom: 1px solid var(--line);
@@ -444,23 +446,22 @@
     table.lt thead th:first-child,
     table.lt thead th.phase-col { text-align: left; }
     table.lt td {
-      padding: 7px 14px;
+      padding: 8px 14px;
       text-align: right;
-      color: var(--text-2);
+      color: var(--text);
       border-bottom: 1px solid var(--line-soft);
     }
-    table.lt td:first-child { text-align: left; color: var(--text-mute); }
+    table.lt td:first-child { text-align: left; color: var(--text-2); }
     table.lt td.phase-col {
       text-align: left;
-      font-family: 'Fraunces', serif;
-      font-style: italic;
-      font-weight: 300;
-      font-size: 13px;
-      color: var(--text-mute);
+      font-family: 'Inter Tight', sans-serif;
+      font-weight: 400;
+      font-size: 12.5px;
+      color: var(--text-2);
     }
     table.lt tr.boundary td { color: var(--maple); border-bottom-color: var(--maple-glow); }
-    table.lt tr.boundary td.phase-col { color: var(--maple); font-style: normal; font-weight: 400; }
-    table.lt tr:hover td { background: rgba(255, 255, 255, 0.015); }
+    table.lt tr.boundary td.phase-col { color: var(--maple); font-weight: 500; }
+    table.lt tr:hover td { background: rgba(255, 255, 255, 0.02); }
 
     .infeas {
       border-left: 2px solid var(--maple);
@@ -471,36 +472,34 @@
     .infeas-head {
       font-family: 'Fraunces', serif;
       font-style: italic;
-      font-weight: 300;
+      font-weight: 500;
       font-size: 22px;
       color: var(--maple);
       margin-bottom: 8px;
     }
     .infeas-body {
-      font-family: 'Fraunces', serif;
-      font-weight: 350;
-      font-size: 16px;
-      color: var(--text-2);
+      font-family: 'Inter Tight', sans-serif;
+      font-weight: 400;
+      font-size: 15.5px;
+      color: var(--text);
       line-height: 1.55;
-      font-variation-settings: 'opsz' 24;
     }
 
     .footer {
       margin-top: 96px;
       padding-top: 32px;
       border-top: 1px solid var(--line-soft);
-      font-family: 'Fraunces', serif;
-      font-style: italic;
-      font-weight: 300;
-      font-size: 13px;
-      color: var(--text-faint);
+      font-family: 'Inter Tight', sans-serif;
+      font-weight: 400;
+      font-size: 13.5px;
+      color: var(--text-mute);
       display: flex;
       justify-content: space-between;
       flex-wrap: wrap;
       gap: 12px;
     }
-    .footer a { color: var(--text-mute); text-decoration: none; }
-    .footer a:hover { color: var(--maple); }
+    .footer a { color: var(--text-2); text-decoration: none; border-bottom: 1px dotted var(--line); }
+    .footer a:hover { color: var(--maple); border-color: var(--maple); }
 
     @media (max-width: 720px) {
       .frame { padding: 40px 20px 64px; }
@@ -820,7 +819,7 @@
           </div>
           <div class="stat-line">
             <span class="stat-label">Days at 6,500 NX / day</span>
-            <span class="stat-value" id="anim-days">${fmt(days)}<span style="font-family:'Inter Tight'; font-size: 12px; color: var(--text-mute); margin-left: 6px;">one account</span></span>
+            <span class="stat-value" id="anim-days">${fmt(days)}<span style="font-family:'Inter Tight'; font-size: 13px; color: var(--text-2); margin-left: 8px; font-weight: 400;">one account</span></span>
           </div>
         </div>
       `;
