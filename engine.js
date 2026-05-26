@@ -103,6 +103,39 @@ function prepareInputs(classData, currentState, goals, className) {
   return notes;
 }
 
+// ─────────────────── Wash-math primitives ───────────────────
+// Named domain operations from CONTEXT.md. Each is a single per-cycle / per-level formula —
+// all consumers (evaluateStrategy, levelTable) should call these instead of inlining the math.
+
+// MP gained per single MP-Wash cycle (Krythan/Nise): freshAPMPBase + floor(Base INT / 10) - mpLossPerReset.
+// Uses Base INT only — Gear INT and Maple Warrior do NOT amplify this per-cycle yield (per Nise).
+function washCycleMP(classData, baseInt) {
+  const deficit = classData.mpLossPerReset - classData.freshAPMPBase;
+  return Math.floor(baseInt / 10) - deficit;
+}
+
+// Per-level MP gained from INT after a level-up: floor((Base INT * MW + Gear INT) / 10).
+// Gear INT contributes only if level ≥ GEAR_WORN_FROM_LEVEL.
+function intMPPerLevel(classData, baseInt, gearInt, mwMultiplier, level) {
+  const gearActive = level >= GEAR_WORN_FROM_LEVEL ? gearInt : 0;
+  return Math.floor((baseInt * mwMultiplier + gearActive) / 10);
+}
+
+// HP yield from Fresh HP Wash (N fresh APs allocated to HP at level-up).
+function freshHPWashYield(classData, count) {
+  return count * classData.freshAPHP;
+}
+
+// HP yield from Stale HP Wash (N -MP +HP AP Resets).
+function staleHPWashYield(classData, count) {
+  return count * classData.staleAPHP;
+}
+
+// MP cost (drain) of N -MP +X AP Resets — same per-reset cost regardless of destination.
+function washCycleMPCost(classData, count) {
+  return count * classData.mpLossPerReset;
+}
+
 // Sum of INT-driven MP contributions over levels (fromLevel, toLevel] (level-ups at L = fromLevel+1 … toLevel).
 // Per Nise: MP Gained LvlUP includes Total INT/10. Per Krythan: MW multiplies the Base-INT portion only.
 // Per spec: Gear INT is worn from level GEAR_WORN_FROM_LEVEL onward (lvl 10 by default).
@@ -194,8 +227,8 @@ function evaluateStrategy(classData, currentState, goals, gearInt, mwMultiplier,
   // --- HP accumulated through phases (natural, JA, Phase-3 fresh+stale wash) ---
   const hpFromNatural = ranges.hpNatural;
   const hpFromJA = ranges.hpJA;
-  const hpFromPhase3Fresh = phase3FreshHPResets * classData.freshAPHP;
-  const hpFromPhase3Stale = phase3StaleHPResets * classData.staleAPHP;
+  const hpFromPhase3Fresh = freshHPWashYield(classData, phase3FreshHPResets);
+  const hpFromPhase3Stale = staleHPWashYield(classData, phase3StaleHPResets);
 
   // --- MP accumulated ---
   const mpFromNatural = ranges.mpNaturalBase;
@@ -206,15 +239,14 @@ function evaluateStrategy(classData, currentState, goals, gearInt, mwMultiplier,
   // Phase 3 still has Base INT = targetBaseInt for non-Mages (reset happens AT target level, not before).
   const mpFromInt_phase3     = intMPContribution(mpWashStop,          goals.targetLevel,   targetBaseInt,   targetBaseInt,   gearInt, mwMultiplier);
 
-  // MP Wash net per cycle (Krythan / Nise): (freshAPMPBase + Base INT/10) - mpLossPerReset = Base INT/10 - deficit.
-  // Uses Base INT only (no Gear INT, no MW). Phase 2 build uses avg INT during the ramp; plateau uses target.
-  const deficit = classData.mpLossPerReset - classData.freshAPMPBase;
+  // MP Wash: 5 cycles per level, each cycle yields washCycleMP(classData, baseInt).
+  // Phase 2 build uses avg INT during the ramp; plateau uses the target.
   const phase2BuildAvgInt = (phase1EndInt + targetBaseInt) / 2;
-  const mpFromMPWashBuild   = phase2BuildLevels   * 5 * (Math.floor(phase2BuildAvgInt / 10) - deficit);
-  const mpFromMPWashPlateau = phase2PlateauLevels * 5 * (Math.floor(targetBaseInt / 10)    - deficit);
+  const mpFromMPWashBuild   = phase2BuildLevels   * 5 * washCycleMP(classData, phase2BuildAvgInt);
+  const mpFromMPWashPlateau = phase2PlateauLevels * 5 * washCycleMP(classData, targetBaseInt);
 
-  // Each Phase 3 fresh-HP-wash AP and each Phase 3 stale-HP-wash drains mpLossPerReset MP.
-  const mpFromPhase3Resets = -(phase3FreshHPResets + phase3StaleHPResets) * classData.mpLossPerReset;
+  // Each Phase 3 fresh-HP-wash AP and each Phase 3 stale-HP-wash is paired with one -MP reset.
+  const mpFromPhase3Resets = -washCycleMPCost(classData, phase3FreshHPResets + phase3StaleHPResets);
 
   // --- Assemble totals at end of phase 3 (before final cleanup stale HP wash at target level) ---
   const hpEndPhase3 = currentState.hp + hpFromNatural + hpFromJA + hpFromPhase3Fresh + hpFromPhase3Stale;
@@ -262,10 +294,9 @@ function evaluateStrategy(classData, currentState, goals, gearInt, mwMultiplier,
   const intResetAPResets = classData.requiresIntResetAtTarget ? Math.max(0, targetBaseInt - STARTING_MAIN_STAT) : 0;
   const hpGap = Math.max(0, goals.hpGoal - hpEndPhase3);
   const cleanupStaleHPWash = hpGap > 0 ? Math.ceil(hpGap / classData.staleAPHP) : 0;
-  const mpCostCleanup = cleanupStaleHPWash * classData.mpLossPerReset;
 
-  let finalHP = Math.min(MAX_HP, hpEndPhase3 + cleanupStaleHPWash * classData.staleAPHP);
-  const finalMP = mpEndPhase3 - mpCostCleanup;
+  let finalHP = Math.min(MAX_HP, hpEndPhase3 + staleHPWashYield(classData, cleanupStaleHPWash));
+  const finalMP = mpEndPhase3 - washCycleMPCost(classData, cleanupStaleHPWash);
 
   const minMPAtTarget = minMPAtLevel(classData, goals.targetLevel);
   if (finalMP < minMPAtTarget) {
@@ -520,11 +551,13 @@ function phasePlan(classData, currentState, goals, result) {
   return phases;
 }
 
-// Generate a level-by-level table. Mirrors the analytical engine's math (same formulas, no Gear INT or MW in MP-wash cycles).
+// Generate a level-by-level table. Mirrors the analytical engine's math by sharing the same
+// wash-math primitives (washCycleMP, intMPPerLevel, freshHPWashYield, staleHPWashYield,
+// washCycleMPCost). Each per-level value is computed with the same formula evaluateStrategy
+// used to compute its analytical sum, so the two paths agree.
 function levelTable(classData, currentState, goals, gearInt, mwMultiplier, result) {
   const p = result.params;
   const rows = [];
-  const deficit = classData.mpLossPerReset - classData.freshAPMPBase;
 
   let hp = currentState.hp;
   let mp = currentState.mp;
@@ -540,8 +573,7 @@ function levelTable(classData, currentState, goals, gearInt, mwMultiplier, resul
       // INT reset happens AT target level AFTER this level-up's MP gain, so use baseInt and full gearInt here.
       hp += naturalHPGainAtLevel(classData, L);
       mp += naturalMPGainAtLevel(classData, L);
-      const gearActive = (L >= GEAR_WORN_FROM_LEVEL) ? gearInt : 0;
-      mp += Math.floor((baseInt * mwMultiplier + gearActive) / 10);
+      mp += intMPPerLevel(classData, baseInt, gearInt, mwMultiplier, L);
       // JA bonus this level
       for (const ja of classData.jaBonuses) {
         if (ja.level === L) {
@@ -560,9 +592,8 @@ function levelTable(classData, currentState, goals, gearInt, mwMultiplier, resul
       if (L > currentState.level) {
         const resetsToInt = Math.min(5, Math.max(0, p.targetBaseInt - baseInt));
         baseInt += resetsToInt;
-        // 5 resets/lvl, gain per cycle = floor(Base INT / 10) - deficit (Base INT only, no Gear, no MW)
-        const mpFromCycle = 5 * (Math.floor(baseInt / 10) - deficit);
-        mp += mpFromCycle;
+        // 5 cycles/lvl, each cycle gain = washCycleMP(class, current baseInt).
+        mp += 5 * washCycleMP(classData, baseInt);
         resetsThisLevel = 5;
       }
     } else if (L < goals.targetLevel) {
@@ -573,8 +604,8 @@ function levelTable(classData, currentState, goals, gearInt, mwMultiplier, resul
               : fresh > 0 ? 'Fresh HP Wash'
               : 'Stale HP Wash';
         if (L > currentState.level) {
-          hp += fresh * classData.freshAPHP + stale * classData.staleAPHP;
-          mp -= (fresh + stale) * classData.mpLossPerReset;
+          hp += freshHPWashYield(classData, fresh) + staleHPWashYield(classData, stale);
+          mp -= washCycleMPCost(classData, fresh + stale);
           resetsThisLevel = fresh + stale;
         }
       } else {
@@ -584,8 +615,8 @@ function levelTable(classData, currentState, goals, gearInt, mwMultiplier, resul
       // L == targetLevel: cleanup stale HP wash (gap fill) + reset INT all happen here.
       const cleanupStale = p.cleanupStaleHPWash || 0;
       const intResets = result.breakdown.intReset;
-      hp = Math.min(MAX_HP, hp + cleanupStale * classData.staleAPHP);
-      mp -= cleanupStale * classData.mpLossPerReset;
+      hp = Math.min(MAX_HP, hp + staleHPWashYield(classData, cleanupStale));
+      mp -= washCycleMPCost(classData, cleanupStale);
       baseInt = classData.requiresIntResetAtTarget ? STARTING_MAIN_STAT : baseInt;
       resetsThisLevel = cleanupStale + intResets;
       phase = cleanupStale > 0 && intResets > 0 ? 'Stale HP Wash + Reset INT'
