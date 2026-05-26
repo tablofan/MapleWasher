@@ -220,6 +220,19 @@
     }
     .field input::placeholder { color: var(--text-faint); }
 
+    .clamp-note {
+      font-family: 'Inter Tight', sans-serif;
+      font-style: italic;
+      font-size: 11.5px;
+      font-weight: 400;
+      color: var(--amber);
+      letter-spacing: 0.01em;
+      margin-top: 4px;
+      line-height: 1.35;
+    }
+    .clamp-note:empty { display: none; }
+    .clamp-note .arr { font-style: normal; margin-right: 4px; opacity: 0.7; }
+
     .calc-row {
       display: flex;
       align-items: center;
@@ -587,10 +600,12 @@
           <div class="field">
             <label for="i-cur-hp">hp</label>
             <input id="i-cur-hp" type="number" inputmode="numeric" min="0" max="30000" step="1" value="50" required>
+            <span class="clamp-note" id="i-cur-hp-clamp-note"></span>
           </div>
           <div class="field">
             <label for="i-cur-mp">mp</label>
             <input id="i-cur-mp" type="number" inputmode="numeric" min="0" max="30000" step="1" value="5" required>
+            <span class="clamp-note" id="i-cur-mp-clamp-note"></span>
           </div>
           <div class="field">
             <label for="i-cur-str">str</label>
@@ -617,10 +632,12 @@
           <div class="field">
             <label for="i-hp-goal">hp goal</label>
             <input id="i-hp-goal" type="number" inputmode="numeric" min="0" max="30000" step="1" value="30000" required>
+            <span class="clamp-note" id="i-hp-goal-clamp-note"></span>
           </div>
           <div class="field">
             <label for="i-mp-goal">mp goal</label>
             <input id="i-mp-goal" type="number" inputmode="numeric" min="0" max="30000" step="1" value="4000" required>
+            <span class="clamp-note" id="i-mp-goal-clamp-note"></span>
           </div>
           <div class="field">
             <label for="i-target-level">target level</label>
@@ -783,6 +800,48 @@
         goals: { hpGoal, mpGoal, targetLevel },
         gearInt,
       };
+    }
+
+    // Mutates `input` to clamp Current HP/MP and HP/MP Goals up to their respective Min HP/MP
+    // floors (Min HP/MP is class-and-level-dependent). Returns the list of clamps applied so
+    // the UI can surface inline notes. The minHPAtLevel / minMPAtLevel globals come from engine.js.
+    function applyMinClamps(input) {
+      const cls = input.classData;
+      const cur = input.currentState;
+      const goals = input.goals;
+      const notes = [];
+
+      const minHPAtCur = minHPAtLevel(cls, cur.level);
+      if (cur.hp < minHPAtCur) {
+        notes.push({ fieldId: 'i-cur-hp', label: 'Current HP', stat: 'HP', clamped: minHPAtCur, atLevel: cur.level });
+        cur.hp = minHPAtCur;
+      }
+      const minMPAtCur = minMPAtLevel(cls, cur.level);
+      if (cur.mp < minMPAtCur) {
+        notes.push({ fieldId: 'i-cur-mp', label: 'Current MP', stat: 'MP', clamped: minMPAtCur, atLevel: cur.level });
+        cur.mp = minMPAtCur;
+      }
+      const minHPAtTgt = minHPAtLevel(cls, goals.targetLevel);
+      if (goals.hpGoal < minHPAtTgt) {
+        notes.push({ fieldId: 'i-hp-goal', label: 'HP Goal', stat: 'HP', clamped: minHPAtTgt, atLevel: goals.targetLevel });
+        goals.hpGoal = minHPAtTgt;
+      }
+      const minMPAtTgt = minMPAtLevel(cls, goals.targetLevel);
+      if (goals.mpGoal < minMPAtTgt) {
+        notes.push({ fieldId: 'i-mp-goal', label: 'MP Goal', stat: 'MP', clamped: minMPAtTgt, atLevel: goals.targetLevel });
+        goals.mpGoal = minMPAtTgt;
+      }
+      return notes;
+    }
+
+    function renderClampNotes(input, notes) {
+      // Clear all clamp notes first.
+      document.querySelectorAll('.clamp-note').forEach(el => { el.innerHTML = ''; });
+      for (const n of notes) {
+        const el = document.getElementById(n.fieldId + '-clamp-note');
+        if (!el) continue;
+        el.innerHTML = `<span class="arr">↳</span>Using ${fmt(n.clamped)} (Min ${n.stat} for ${input.className} at lvl ${n.atLevel})`;
+      }
     }
 
     function showFormError(msg) {
@@ -994,6 +1053,10 @@
         return;
       }
       showFormError(null);
+      // Clamp HP/MP-ish inputs up to their respective class+level minimums. The user keeps their
+      // typed value displayed; the engine receives the floored value. Notes inform them inline.
+      const clampNotes = applyMinClamps(input);
+      renderClampNotes(input, clampNotes);
       const result = optimize(input.classData, input.currentState, input.goals, input.gearInt, input.mwMultiplier);
       renderResult(input, result);
     }
