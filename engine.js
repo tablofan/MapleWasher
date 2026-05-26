@@ -70,26 +70,21 @@ function minHPAtLevel(classData, level) {
   return Math.max(0, classData.minHPFormula(level));
 }
 
-// Clamp the four HP/MP-ish user inputs (Current HP, Current MP, HP Goal, MP Goal) up to their
-// class+level Min HP/MP floors. The user's typed values were impossible-in-game state; the
-// engine receives the floored values and the UI surfaces the returned `notes` inline.
+// Clamp HP Goal and MP Goal up to their respective class+level Min HP/MP floors at the
+// Target Level. At Target Level the character is in its post-2nd-JA state, where max HP/MP
+// is game-enforced to be ≥ Min HP/MP — so a Goal below the floor is unreachable-NOT-to-meet,
+// and we treat the user's typed Goal as the floor. The user's typed value stays visible in
+// the input; the engine receives the floored value; the UI surfaces the returned `notes`.
+//
+// IMPORTANT: Current HP and Current MP are NOT clamped. Pre-2nd-JA states (e.g. lvl 1 with
+// HP 50 / MP 5) legitimately sit below the Min HP/MP formula — the formulas describe the
+// post-advancement floor, not a hard constraint on the user's actual current state.
 //
 // Mutates the input objects in place and returns the list of clamps applied. Each note carries
-// { fieldId, label, stat, clamped, atLevel, className } so the caller can render contextual
-// messages like "Using 1,535 (Min MP for Night Lord at lvl 100)".
+// { fieldId, label, stat, clamped, atLevel, className }.
 function prepareInputs(classData, currentState, goals, className) {
   const notes = [];
 
-  const minHPAtCur = minHPAtLevel(classData, currentState.level);
-  if (currentState.hp < minHPAtCur) {
-    notes.push({ fieldId: 'i-cur-hp', label: 'Current HP', stat: 'HP', clamped: minHPAtCur, atLevel: currentState.level, className });
-    currentState.hp = minHPAtCur;
-  }
-  const minMPAtCur = minMPAtLevel(classData, currentState.level);
-  if (currentState.mp < minMPAtCur) {
-    notes.push({ fieldId: 'i-cur-mp', label: 'Current MP', stat: 'MP', clamped: minMPAtCur, atLevel: currentState.level, className });
-    currentState.mp = minMPAtCur;
-  }
   const minHPAtTgt = minHPAtLevel(classData, goals.targetLevel);
   if (goals.hpGoal < minHPAtTgt) {
     notes.push({ fieldId: 'i-hp-goal', label: 'HP Goal', stat: 'HP', clamped: minHPAtTgt, atLevel: goals.targetLevel, className });

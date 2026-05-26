@@ -19,8 +19,11 @@ The character level at which both **HP Goal** and **MP Goal** must be satisfied.
 _Avoid_: goal level, washing target level
 
 **Minimum MP**:
-The class-and-level-dependent MP floor that **AP Resets** cannot drop MP below. A game-enforced lower bound. Computed per Nise's MapleLegends formulas (e.g. `14·L + 135` for 2nd-job+ Thieves).
+The class-and-level-dependent MP floor that `-MP +stat` **AP Resets** cannot drop max MP below. A game-enforced lower bound on resets — not on user input. Computed per Nise's MapleLegends formulas (e.g. `14·L + 135` for 2nd-job+ Thieves). Describes the *post-2nd-JA* state; a character's actual max MP can be below the formula in pre-advancement states (e.g. a level 1 character starts with MP 5, far below any class's formula value).
 _Avoid_: MP floor, min MP
+
+**Minimum HP**:
+Same shape as **Minimum MP** but for HP. The floor that `-HP +stat` **AP Resets** cannot drop max HP below at a given level, post-2nd-JA. Per-class formula in `classes.js`.
 
 ### Game primitives
 
@@ -50,6 +53,10 @@ _Avoid_: primary stat, attacking stat
 **Non-INT Stats Pool**:
 The user inputs current values for all four stats (STR, DEX, LUK, INT), each floored at the starting value of 4. For positive **Shift to INT**, the optimizer treats all non-INT stats (STR + DEX + LUK) as a single shift-budget pool — the player decides which specific stat(s) to draw from when executing the plan. At target level the **Reset Base INT** step collapses any returned INT back into the **Main Stat**, so non-MainStat stat points consumed by the wash are not preserved (the player can manually redistribute via Cash Shop afterward if desired).
 _Avoid_: side stats, secondary stats
+
+**HP/MP Pool**:
+A single shared counter of AP points the player has placed into HP or MP (via **AP Allocation** or `-stat +HP/MP` **AP Resets**). The game enforces: `-HP/MP +stat` resets require this pool to be non-empty (you can only reclaim AP you previously placed). `-stat +HP/MP` is unconstrained. MapleWasher assumes the user's **HP/MP Pool** is 0 at the start of the calculation — this is conservative (no historical wash credit), and the optimizer's plan structure (Phase 2 always opens with fresh-AP-to-MP, replenishing the pool before any `-MP +stat` reset) keeps the pool ≥ 0 throughout.
+_Avoid_: HP pool, MP pool (they are one)
 
 ### Wash phases & strategy
 

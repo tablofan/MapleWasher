@@ -491,35 +491,44 @@ describe('Phase steps in isolation', () => {
 
 // ────────────────────────── prepareInputs clamping ──────────────────────────
 
-describe('prepareInputs clamps below-Min HP/MP', () => {
-  test('Current MP below Min MP is clamped up and recorded in notes', () => {
-    const cur = { level: 100, hp: 5000, mp: 100, str: 4, dex: 4, luk: 4, baseInt: 4 };
+describe('prepareInputs clamps Goals only (not Current HP/MP)', () => {
+  test('HP Goal below Min HP at target is clamped to the floor with a note', () => {
+    const cur = { level: 100, hp: 5000, mp: 2000, str: 4, dex: 4, luk: 4, baseInt: 4 };
+    const goals = { hpGoal: 100, mpGoal: 5000, targetLevel: 180 };
+    const notes = prepareInputs(CLASSES['Night Lord'], cur, goals, 'Night Lord');
+    // NL Min HP at lvl 180 = 20*180 + 378 = 3978
+    assertEq(goals.hpGoal, 3978, 'HP Goal clamped to Min HP at target');
+    const note = notes.find(n => n.fieldId === 'i-hp-goal');
+    assertTrue(note, 'note recorded for HP Goal');
+    assertEq(note.clamped, 3978);
+    assertEq(note.atLevel, 180);
+  });
+  test('MP Goal below Min MP at target is clamped to the floor with a note', () => {
+    const cur = { level: 100, hp: 5000, mp: 2000, str: 4, dex: 4, luk: 4, baseInt: 4 };
+    const goals = { hpGoal: 30000, mpGoal: 100, targetLevel: 180 };
+    const notes = prepareInputs(CLASSES['Night Lord'], cur, goals, 'Night Lord');
+    // NL Min MP at lvl 180 = 14*180 + 135 = 2655
+    assertEq(goals.mpGoal, 2655, 'MP Goal clamped to Min MP at target');
+    const note = notes.find(n => n.fieldId === 'i-mp-goal');
+    assertTrue(note, 'note recorded for MP Goal');
+    assertEq(note.clamped, 2655);
+  });
+  test('Current HP/MP below Min are NOT clamped (legitimate pre-2nd-JA state)', () => {
+    // Lvl 1 NL: HP 50 / MP 5 from game start, well below NL's post-2nd-JA Min HP/MP formulas.
+    // These values must pass through untouched — pre-advancement state is real.
+    const cur = { level: 1, hp: 50, mp: 5, str: 4, dex: 4, luk: 4, baseInt: 4 };
     const goals = { hpGoal: 30000, mpGoal: 5000, targetLevel: 180 };
     const notes = prepareInputs(CLASSES['Night Lord'], cur, goals, 'Night Lord');
-    // NL Min MP at lvl 100 = 14*100 + 135 = 1535
-    assertEq(cur.mp, 1535, 'Current MP clamped to Min MP');
-    const note = notes.find(n => n.fieldId === 'i-cur-mp');
-    assertTrue(note, 'note recorded for Current MP');
-    assertEq(note.clamped, 1535);
-    assertEq(note.atLevel, 100);
-    assertEq(note.className, 'Night Lord');
+    assertEq(cur.hp, 50, 'Current HP unchanged');
+    assertEq(cur.mp, 5, 'Current MP unchanged');
+    assertTrue(!notes.find(n => n.fieldId === 'i-cur-hp'), 'no Current HP note');
+    assertTrue(!notes.find(n => n.fieldId === 'i-cur-mp'), 'no Current MP note');
   });
   test('Above-Min values are not clamped and produce no notes', () => {
     const cur = { level: 100, hp: 5000, mp: 2000, str: 4, dex: 4, luk: 4, baseInt: 4 };
     const goals = { hpGoal: 30000, mpGoal: 5000, targetLevel: 180 };
     const notes = prepareInputs(CLASSES['Night Lord'], cur, goals, 'Night Lord');
-    assertEq(cur.mp, 2000, 'Current MP unchanged');
     assertEq(notes.length, 0, 'no notes');
-  });
-  test('All four fields can be clamped in one call', () => {
-    const cur = { level: 50, hp: 1, mp: 1, str: 4, dex: 4, luk: 4, baseInt: 4 };
-    const goals = { hpGoal: 1, mpGoal: 1, targetLevel: 180 };
-    const notes = prepareInputs(CLASSES['Magician'], cur, goals, 'Magician');
-    assertEq(notes.length, 4, '4 notes for 4 below-min values');
-    assertTrue(notes.find(n => n.fieldId === 'i-cur-hp'), 'Current HP note');
-    assertTrue(notes.find(n => n.fieldId === 'i-cur-mp'), 'Current MP note');
-    assertTrue(notes.find(n => n.fieldId === 'i-hp-goal'), 'HP Goal note');
-    assertTrue(notes.find(n => n.fieldId === 'i-mp-goal'), 'MP Goal note');
   });
 });
 
