@@ -267,3 +267,14 @@ const MAPLE_WARRIOR_LEVELS = [
   { label: 'MW 20', level: 20, multiplier: 1.10 },
   { label: 'MW 30', level: 30, multiplier: 1.15 },
 ];
+
+// Derived behaviour flags — computed once so the engine reads named fields instead of
+// re-deriving `mainStat === 'INT'` at every site. Source of truth stays `mainStat`.
+for (const cls of Object.values(CLASSES)) {
+  cls.isMage = cls.mainStat === 'INT';
+  // At target level, non-Mages reset Base INT down to STARTING_MAIN_STAT (-INT +MainStat).
+  // Mages skip this — INT is their Main Stat, the reset would be a no-op.
+  cls.requiresIntResetAtTarget = !cls.isMage;
+  // Pre-game `Shift from INT` (-INT +MainStat) is meaningful only when MainStat != INT.
+  cls.canShiftIntDownToMainStat = !cls.isMage;
+}

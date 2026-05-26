@@ -116,7 +116,6 @@ function intMPContribution(fromLevel, toLevel, startInt, endInt, gearInt, mwMult
 // Returns { feasible, finalHP, finalMP, apResets, breakdown, params }.
 function evaluateStrategy(classData, currentState, goals, gearInt, mwMultiplier, params, ranges) {
   const { targetBaseInt, mpWashStart, mpWashStop, shift, freshHPPerLevelPhase3, staleHPPerLevelPhase3 = 0 } = params;
-  const isMage = classData.mainStat === 'INT';
   // Cached range sums (if not provided, compute lazily).
   ranges = ranges || precomputeRanges(classData, currentState.level, goals.targetLevel);
 
@@ -227,7 +226,7 @@ function evaluateStrategy(classData, currentState, goals, gearInt, mwMultiplier,
   }
 
   // --- Final cleanup at target level: stale HP wash (to fill HP gap) + Base INT reset ---
-  const intResetAPResets = isMage ? 0 : Math.max(0, targetBaseInt - STARTING_MAIN_STAT);
+  const intResetAPResets = classData.requiresIntResetAtTarget ? Math.max(0, targetBaseInt - STARTING_MAIN_STAT) : 0;
   const hpGap = Math.max(0, goals.hpGoal - hpEndPhase3);
   const cleanupStaleHPWash = hpGap > 0 ? Math.ceil(hpGap / classData.staleAPHP) : 0;
   const mpCostCleanup = cleanupStaleHPWash * classData.mpLossPerReset;
@@ -312,14 +311,13 @@ function optimize(classData, currentState, goals, gearInt, mwMultiplier) {
   }
   const minMPAtTarget = minMPAtLevel(classData, goals.targetLevel);
   if (goals.mpGoal < minMPAtTarget) {
-    return { feasible: false, reason: `MP Goal (${goals.mpGoal}) is below the minimum possible MP (${minMPAtTarget}) at level ${goals.targetLevel} for a ${classData.mainStat === 'INT' ? 'Magician' : 'character of this class'}.` };
+    return { feasible: false, reason: `MP Goal (${goals.mpGoal}) is below the minimum possible MP (${minMPAtTarget}) at level ${goals.targetLevel} for a ${classData.isMage ? 'Magician' : 'character of this class'}.` };
   }
   const minHPAtTarget = minHPAtLevel(classData, goals.targetLevel);
   if (goals.hpGoal < minHPAtTarget) {
     return { feasible: false, reason: `HP Goal (${goals.hpGoal}) is below the minimum possible HP (${minHPAtTarget}) at level ${goals.targetLevel}.` };
   }
 
-  const isMage = classData.mainStat === 'INT';
   const remainingLevels = goals.targetLevel - currentState.level;
   // Positive-shift budget = sum of non-INT stats above starting. The optimizer doesn't care which specific
   // non-INT stat is the source — the player chooses (and accepts the consume-into-MainStat collapse at target).
@@ -329,8 +327,7 @@ function optimize(classData, currentState, goals, gearInt, mwMultiplier) {
   const maxPositiveShift = Math.max(0,
     (str - STARTING_MAIN_STAT) + (dex - STARTING_MAIN_STAT) + (luk - STARTING_MAIN_STAT)
   );
-  // Mages can't shift INT down — their MainStat IS INT, so the destination is a no-op.
-  const maxNegativeShift = isMage ? 0 : Math.max(0, currentState.baseInt - STARTING_MAIN_STAT);
+  const maxNegativeShift = classData.canShiftIntDownToMainStat ? Math.max(0, currentState.baseInt - STARTING_MAIN_STAT) : 0;
 
   // Precompute range sums (these depend only on class + currentLevel + targetLevel, not strategy).
   const ranges = precomputeRanges(classData, currentState.level, goals.targetLevel);
@@ -417,7 +414,6 @@ function optimize(classData, currentState, goals, gearInt, mwMultiplier) {
 
 // Generate a Phase Plan description from a chosen strategy result.
 function phasePlan(classData, currentState, goals, result) {
-  const isMage = classData.mainStat === 'INT';
   const p = result.params;
   const b = result.breakdown;
   const phases = [];
@@ -494,7 +490,6 @@ function phasePlan(classData, currentState, goals, result) {
 // Generate a level-by-level table. Mirrors the analytical engine's math (same formulas, no Gear INT or MW in MP-wash cycles).
 function levelTable(classData, currentState, goals, gearInt, mwMultiplier, result) {
   const p = result.params;
-  const isMage = classData.mainStat === 'INT';
   const rows = [];
   const deficit = classData.mpLossPerReset - classData.freshAPMPBase;
 
@@ -558,7 +553,7 @@ function levelTable(classData, currentState, goals, gearInt, mwMultiplier, resul
       const intResets = result.breakdown.intReset;
       hp = Math.min(MAX_HP, hp + cleanupStale * classData.staleAPHP);
       mp -= cleanupStale * classData.mpLossPerReset;
-      baseInt = isMage ? baseInt : STARTING_MAIN_STAT;
+      baseInt = classData.requiresIntResetAtTarget ? STARTING_MAIN_STAT : baseInt;
       resetsThisLevel = cleanupStale + intResets;
       phase = cleanupStale > 0 && intResets > 0 ? 'Stale HP Wash + Reset INT'
         : cleanupStale > 0 ? 'Stale HP Wash'
