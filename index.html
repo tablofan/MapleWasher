@@ -275,9 +275,6 @@
     }
     .form-error[hidden] { display: none; }
 
-    /* Hide Main Stat field when class is Mage (INT is the main stat — same as Base INT) */
-    body.is-mage .field-mainstat { display: none; }
-
     .result {
       opacity: 0;
       visibility: hidden;  /* hide from accessibility tree until populated */
@@ -596,12 +593,20 @@
             <input id="i-cur-mp" type="number" inputmode="numeric" min="0" max="30000" step="1" value="5" required>
           </div>
           <div class="field">
+            <label for="i-cur-str">str</label>
+            <input id="i-cur-str" type="number" inputmode="numeric" min="4" max="9999" step="1" value="4" required>
+          </div>
+          <div class="field">
+            <label for="i-cur-dex">dex</label>
+            <input id="i-cur-dex" type="number" inputmode="numeric" min="4" max="9999" step="1" value="4" required>
+          </div>
+          <div class="field">
+            <label for="i-cur-luk">luk</label>
+            <input id="i-cur-luk" type="number" inputmode="numeric" min="4" max="9999" step="1" value="4" required>
+          </div>
+          <div class="field">
             <label for="i-cur-int">base int</label>
             <input id="i-cur-int" type="number" inputmode="numeric" min="4" max="9999" step="1" value="4" required>
-          </div>
-          <div class="field field-mainstat">
-            <label for="i-cur-mainstat"><span id="i-cur-mainstat-label">main stat</span></label>
-            <input id="i-cur-mainstat" type="number" inputmode="numeric" min="4" max="9999" step="1" value="4" required>
           </div>
         </div>
       </div>
@@ -735,12 +740,6 @@
     const $ = id => document.getElementById(id);
     const fmt = n => Number(n).toLocaleString(undefined, { maximumFractionDigits: 0 });
 
-    function updateMainStatLabel() {
-      const cls = CLASSES[classSelect.value];
-      $('i-cur-mainstat-label').textContent = cls.mainStat.toLowerCase();
-      document.body.classList.toggle('is-mage', cls.mainStat === 'INT');
-    }
-
     // Read one numeric field; returns the parsed Number or null if blank / non-finite.
     // Bound checks against the input's min/max attributes are respected.
     function readField(id) {
@@ -758,21 +757,20 @@
     function readInputs() {
       const className = classSelect.value;
       const classData = CLASSES[className];
-      const isMage = classData.mainStat === 'INT';
 
       const level = readField('i-cur-level');
       const hp = readField('i-cur-hp');
       const mp = readField('i-cur-mp');
+      const str = readField('i-cur-str');
+      const dex = readField('i-cur-dex');
+      const luk = readField('i-cur-luk');
       const baseInt = readField('i-cur-int');
-      // For Mages, INT IS the Main Stat. The hidden Main Stat field is not read; we mirror baseInt
-      // so any "shift" math (which sees mainStat as the conversion source) treats them as one stat.
-      const mainStat = isMage ? baseInt : readField('i-cur-mainstat');
       const hpGoal = readField('i-hp-goal');
       const mpGoal = readField('i-mp-goal');
       const targetLevel = readField('i-target-level');
       const gearInt = readField('i-gear-int');
 
-      const fields = [level, hp, mp, baseInt, mainStat, hpGoal, mpGoal, targetLevel, gearInt];
+      const fields = [level, hp, mp, str, dex, luk, baseInt, hpGoal, mpGoal, targetLevel, gearInt];
       if (fields.some(v => v === null)) return null;
 
       const mwLevel = Number(mwSelect.value);
@@ -781,7 +779,7 @@
 
       return {
         className, classData, mwMultiplier, mwLevel,
-        currentState: { level, hp, mp, baseInt, mainStat },
+        currentState: { level, hp, mp, str, dex, luk, baseInt },
         goals: { hpGoal, mpGoal, targetLevel },
         gearInt,
       };
@@ -808,12 +806,13 @@
 
     const opLabels = {
       // shift entry is direction-dependent — `op` is computed at render time using breakdown.shiftDir.
-      shift_up:   { op: '-STAT +INT', label: 'Mid-progress shift to INT' },
+      // `shift_up` source is any non-INT stat (player picks); literal — STAT substitution doesn't apply.
+      shift_up:   { op: '-STR/DEX/LUK +INT', label: 'Mid-progress shift to INT (drawn from your non-INT stats)' },
       shift_down: { op: '-INT +STAT', label: 'Mid-progress shift from INT (reduce overbuilt INT)' },
       mpWash:     { op: '-MP +INT/STAT', label: 'MP Wash cycles' },
       phase3Fresh:{ op: '-MP +STAT', label: 'Fresh HP Wash (post-MP-Wash)' },
       intReset:   { op: '-INT +STAT', label: 'Reset Base INT' },
-      staleHPWash:{ op: '-MP +HP', label: 'Stale HP Wash' },
+      staleHPWash:{ op: '-MP +HP', label: 'Stale HP Wash (mid-flight + cleanup)' },
     };
 
     function renderResult(input, result) {
@@ -999,15 +998,7 @@
       renderResult(input, result);
     }
 
-    classSelect.addEventListener('change', () => {
-      updateMainStatLabel();
-      // Auto-sync Base INT to Main Stat for Mages (where INT IS the main stat) so they're consistent.
-      const cls = CLASSES[classSelect.value];
-      if (cls.mainStat === 'INT') {
-        $('i-cur-mainstat').value = $('i-cur-int').value;
-      }
-      runCalc();
-    });
+    classSelect.addEventListener('change', () => runCalc());
     mwSelect.addEventListener('change', () => runCalc());
     document.querySelectorAll('input[type=number]').forEach(el => {
       el.addEventListener('input', () => {
@@ -1028,7 +1019,6 @@
         isOpen ? 'Hide full level table' : 'Show full level table';
     });
 
-    updateMainStatLabel();
     runCalc(true);
   </script>
 </body>

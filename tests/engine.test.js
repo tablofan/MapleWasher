@@ -89,10 +89,19 @@ function assertInfeasible(result, reasonSubstring) {
 }
 
 // Convenience builder for `optimize` arguments.
+// Supports both the new 4-stat shape (str/dex/luk/baseInt) and the legacy { mainStat: N } shorthand.
+// When `mainStat` is supplied for a non-Mage class, it's mapped onto the class's main stat field.
 function plan(opts) {
   const classData = CLASSES[opts.class];
   if (!classData) throw new Error('unknown class: ' + opts.class);
-  const currentState = Object.assign({ level: 1, hp: 50, mp: 5, baseInt: 4, mainStat: 4 }, opts.current || {});
+  const currentState = Object.assign(
+    { level: 1, hp: 50, mp: 5, str: 4, dex: 4, luk: 4, baseInt: 4 },
+    opts.current || {}
+  );
+  if (opts.current && opts.current.mainStat !== undefined && classData.mainStat !== 'INT') {
+    currentState[classData.mainStat.toLowerCase()] = opts.current.mainStat;
+  }
+  delete currentState.mainStat;
   const goals = Object.assign({ hpGoal: 30000, mpGoal: 5000, targetLevel: 180 }, opts.goals || {});
   const gearInt = opts.gearInt ?? 40;
   const mwMultiplier = opts.mwMultiplier ?? 1.0;
@@ -405,6 +414,107 @@ describe('Infeasibility detection', () => {
     const r = plan({ class: 'Magician', goals: { hpGoal: 2000, mpGoal: 5000, targetLevel: 180 } });
     assertFeasible(r);
     assertTrue(r.params.mpEndPhase3 <= 30000, 'mpEndPhase3 must respect 30k cap');
+  });
+});
+
+// ────────────────────────── Phase 3 stale-wash absorption ──────────────────────────
+
+describe('Phase 3 stale-wash and peak MP cap', () => {
+  test('Magician with moderate goals finds a feasible plan that respects peak MP cap', () => {
+    const r = plan({
+      class: 'Magician',
+      goals: { hpGoal: 5000, mpGoal: 15000, targetLevel: 180 },
+      gearInt: 40,
+    });
+    assertFeasible(r);
+    assertTrue(r.params.mpEndPhase2 <= 30000, `peak MP at mpWashStop (${r.params.mpEndPhase2}) must respect 30k cap`);
+    assertTrue(r.params.mpEndPhase3 <= 30000, `MP at target (${r.params.mpEndPhase3}) must respect 30k cap`);
+    assertTrue(r.finalHP >= 5000, 'HP goal met');
+    assertTrue(r.finalMP >= 15000, 'MP goal met');
+  });
+
+  test('Peak MP at end of Phase 2 stays ≤ 30k for every class', () => {
+    // The engine's peak-MP check covers the boundary between Phase 2 and Phase 3.
+    // Verify mpEndPhase2 is present in params and respects the cap for all classes.
+    for (const className of CLASS_ORDER) {
+      const goals = className === 'Magician' ? { hpGoal: 5000, mpGoal: 10000, targetLevel: 180 }
+                  : className === 'Beginner' ? { hpGoal: 5000, mpGoal: 2000, targetLevel: 180 }
+                  : { hpGoal: 30000, mpGoal: 5000, targetLevel: 180 };
+      if (className === 'Hero' || className === 'Dark Knight' || className === 'Paladin') {
+        goals.mpGoal = 2000;
+      }
+      if (className === 'Buccaneer') goals.mpGoal = 4000;
+      const r = plan({ class: className, goals });
+      assertFeasible(r);
+      assertTrue(typeof r.params.mpEndPhase2 === 'number', `${className}: mpEndPhase2 present in params`);
+      assertTrue(r.params.mpEndPhase2 <= 30000, `${className}: peak MP (${r.params.mpEndPhase2}) ≤ 30k cap`);
+    }
+  });
+
+  test('Stale HP Wash breakdown lumps Phase 3 stale + cleanup stale into one count', () => {
+    const r = plan({
+      class: 'Night Lord',
+      goals: { hpGoal: 30000, mpGoal: 5000, targetLevel: 180 },
+    });
+    assertFeasible(r);
+    const phase3Stale = r.params.phase3StaleHPResets || 0;
+    const cleanupStale = r.params.cleanupStaleHPWash || 0;
+    assertEq(r.breakdown.staleHPWash, phase3Stale + cleanupStale, 'breakdown.staleHPWash = Phase 3 stale + cleanup stale');
+  });
+
+  test('Invariant: apResets equals sum of all reset categories', () => {
+    const r = plan({
+      class: 'Magician',
+      goals: { hpGoal: 5000, mpGoal: 15000, targetLevel: 180 },
+      gearInt: 40,
+    });
+    assertFeasible(r);
+    const b = r.breakdown;
+    const sum = b.shift + b.mpWash + b.phase3Fresh + b.intReset + b.staleHPWash;
+    assertEq(r.apResets, sum, `apResets ${r.apResets} != sum ${sum}`);
+  });
+});
+
+// ────────────────────────── 4-stat shift budget ──────────────────────────
+
+describe('4-stat shift budget', () => {
+  test('Mage with extra LUK can shift LUK into INT pre-game', () => {
+    // Mage that accidentally built LUK (50). The optimizer can shift it into INT.
+    // Before the 4-stat change, Mages had maxPositiveShift = 0 (since their "mainStat" was INT).
+    const r = plan({
+      class: 'Magician',
+      current: { level: 50, hp: 1500, mp: 3000, str: 4, dex: 4, luk: 50, baseInt: 4 },
+      goals: { hpGoal: 5000, mpGoal: 10000, targetLevel: 180 },
+    });
+    assertFeasible(r);
+    // The optimizer is free to use the LUK pool — shift may be > 0 if cheaper.
+    assertTrue(r.breakdown.shift >= 0, 'shift count is non-negative');
+  });
+
+  test('Optimizer can shift from a non-MainStat stat (e.g., DEX on a Night Lord)', () => {
+    // NL whose extras sit in DEX (not LUK). Pre-4-stat-change this was invisible to the optimizer.
+    const r = plan({
+      class: 'Night Lord',
+      current: { level: 100, hp: 4000, mp: 1500, str: 4, dex: 400, luk: 4, baseInt: 4 },
+      goals: { hpGoal: 30000, mpGoal: 5000, targetLevel: 180 },
+    });
+    assertFeasible(r);
+    assertTrue(r.breakdown.shift > 0, 'should shift some non-INT into INT');
+    assertEq(r.breakdown.shiftDir, 'up');
+    assertTrue(r.breakdown.shift <= 396, `shift ${r.breakdown.shift} ≤ DEX budget 396`);
+  });
+
+  test('Mage cannot do negative shift (INT-to-MainStat is a no-op for them)', () => {
+    // Mage with over-built INT — should NOT shift down (no useful destination).
+    const r = plan({
+      class: 'Magician',
+      current: { level: 100, hp: 4000, mp: 10000, str: 4, dex: 4, luk: 4, baseInt: 600 },
+      goals: { hpGoal: 5000, mpGoal: 10000, targetLevel: 180 },
+    });
+    assertFeasible(r);
+    if (r.breakdown.shift > 0) {
+      assertTrue(r.breakdown.shiftDir !== 'down', 'Mages should not shift INT down');
+    }
   });
 });
 
