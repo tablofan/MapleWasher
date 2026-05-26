@@ -802,45 +802,14 @@
       };
     }
 
-    // Mutates `input` to clamp Current HP/MP and HP/MP Goals up to their respective Min HP/MP
-    // floors (Min HP/MP is class-and-level-dependent). Returns the list of clamps applied so
-    // the UI can surface inline notes. The minHPAtLevel / minMPAtLevel globals come from engine.js.
-    function applyMinClamps(input) {
-      const cls = input.classData;
-      const cur = input.currentState;
-      const goals = input.goals;
-      const notes = [];
-
-      const minHPAtCur = minHPAtLevel(cls, cur.level);
-      if (cur.hp < minHPAtCur) {
-        notes.push({ fieldId: 'i-cur-hp', label: 'Current HP', stat: 'HP', clamped: minHPAtCur, atLevel: cur.level });
-        cur.hp = minHPAtCur;
-      }
-      const minMPAtCur = minMPAtLevel(cls, cur.level);
-      if (cur.mp < minMPAtCur) {
-        notes.push({ fieldId: 'i-cur-mp', label: 'Current MP', stat: 'MP', clamped: minMPAtCur, atLevel: cur.level });
-        cur.mp = minMPAtCur;
-      }
-      const minHPAtTgt = minHPAtLevel(cls, goals.targetLevel);
-      if (goals.hpGoal < minHPAtTgt) {
-        notes.push({ fieldId: 'i-hp-goal', label: 'HP Goal', stat: 'HP', clamped: minHPAtTgt, atLevel: goals.targetLevel });
-        goals.hpGoal = minHPAtTgt;
-      }
-      const minMPAtTgt = minMPAtLevel(cls, goals.targetLevel);
-      if (goals.mpGoal < minMPAtTgt) {
-        notes.push({ fieldId: 'i-mp-goal', label: 'MP Goal', stat: 'MP', clamped: minMPAtTgt, atLevel: goals.targetLevel });
-        goals.mpGoal = minMPAtTgt;
-      }
-      return notes;
-    }
-
-    function renderClampNotes(input, notes) {
-      // Clear all clamp notes first.
+    // Clears any prior notes and renders the clamps returned by engine.prepareInputs() inline
+    // below the relevant input field.
+    function renderClampNotes(notes) {
       document.querySelectorAll('.clamp-note').forEach(el => { el.innerHTML = ''; });
       for (const n of notes) {
         const el = document.getElementById(n.fieldId + '-clamp-note');
         if (!el) continue;
-        el.innerHTML = `<span class="arr">↳</span>Using ${fmt(n.clamped)} (Min ${n.stat} for ${input.className} at lvl ${n.atLevel})`;
+        el.innerHTML = `<span class="arr">↳</span>Using ${fmt(n.clamped)} (Min ${n.stat} for ${n.className} at lvl ${n.atLevel})`;
       }
     }
 
@@ -1055,8 +1024,8 @@
       showFormError(null);
       // Clamp HP/MP-ish inputs up to their respective class+level minimums. The user keeps their
       // typed value displayed; the engine receives the floored value. Notes inform them inline.
-      const clampNotes = applyMinClamps(input);
-      renderClampNotes(input, clampNotes);
+      const clampNotes = prepareInputs(input.classData, input.currentState, input.goals, input.className);
+      renderClampNotes(clampNotes);
       const result = optimize(input.classData, input.currentState, input.goals, input.gearInt, input.mwMultiplier);
       renderResult(input, result);
     }

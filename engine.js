@@ -70,6 +70,39 @@ function minHPAtLevel(classData, level) {
   return Math.max(0, classData.minHPFormula(level));
 }
 
+// Clamp the four HP/MP-ish user inputs (Current HP, Current MP, HP Goal, MP Goal) up to their
+// class+level Min HP/MP floors. The user's typed values were impossible-in-game state; the
+// engine receives the floored values and the UI surfaces the returned `notes` inline.
+//
+// Mutates the input objects in place and returns the list of clamps applied. Each note carries
+// { fieldId, label, stat, clamped, atLevel, className } so the caller can render contextual
+// messages like "Using 1,535 (Min MP for Night Lord at lvl 100)".
+function prepareInputs(classData, currentState, goals, className) {
+  const notes = [];
+
+  const minHPAtCur = minHPAtLevel(classData, currentState.level);
+  if (currentState.hp < minHPAtCur) {
+    notes.push({ fieldId: 'i-cur-hp', label: 'Current HP', stat: 'HP', clamped: minHPAtCur, atLevel: currentState.level, className });
+    currentState.hp = minHPAtCur;
+  }
+  const minMPAtCur = minMPAtLevel(classData, currentState.level);
+  if (currentState.mp < minMPAtCur) {
+    notes.push({ fieldId: 'i-cur-mp', label: 'Current MP', stat: 'MP', clamped: minMPAtCur, atLevel: currentState.level, className });
+    currentState.mp = minMPAtCur;
+  }
+  const minHPAtTgt = minHPAtLevel(classData, goals.targetLevel);
+  if (goals.hpGoal < minHPAtTgt) {
+    notes.push({ fieldId: 'i-hp-goal', label: 'HP Goal', stat: 'HP', clamped: minHPAtTgt, atLevel: goals.targetLevel, className });
+    goals.hpGoal = minHPAtTgt;
+  }
+  const minMPAtTgt = minMPAtLevel(classData, goals.targetLevel);
+  if (goals.mpGoal < minMPAtTgt) {
+    notes.push({ fieldId: 'i-mp-goal', label: 'MP Goal', stat: 'MP', clamped: minMPAtTgt, atLevel: goals.targetLevel, className });
+    goals.mpGoal = minMPAtTgt;
+  }
+  return notes;
+}
+
 // Sum of INT-driven MP contributions over levels (fromLevel, toLevel] (level-ups at L = fromLevel+1 … toLevel).
 // Per Nise: MP Gained LvlUP includes Total INT/10. Per Krythan: MW multiplies the Base-INT portion only.
 // Per spec: Gear INT is worn from level GEAR_WORN_FROM_LEVEL onward (lvl 10 by default).

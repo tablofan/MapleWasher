@@ -31,12 +31,12 @@ const exportList = [
   'NX_PER_AP_RESET', 'MAX_NX_PER_DAY_PER_ACCOUNT',
   'MAX_HP', 'MAX_MP',
   'optimize', 'evaluateStrategy', 'phasePlan', 'levelTable',
-  'minMPAtLevel', 'minHPAtLevel',
+  'minMPAtLevel', 'minHPAtLevel', 'prepareInputs',
 ];
 fs.writeFileSync(tmpModule, classesSrc + '\n' + engineSrc + '\n' + `module.exports = { ${exportList.join(', ')} };`);
 process.on('exit', () => { try { fs.unlinkSync(tmpModule); } catch {} });
 const mod = require(tmpModule);
-const { CLASSES, CLASS_ORDER, optimize, phasePlan, levelTable } = mod;
+const { CLASSES, CLASS_ORDER, optimize, phasePlan, levelTable, prepareInputs } = mod;
 globalThis.mod = mod;
 
 // ────────────────────────── tiny harness ──────────────────────────
@@ -414,6 +414,40 @@ describe('Infeasibility detection', () => {
     const r = plan({ class: 'Magician', goals: { hpGoal: 2000, mpGoal: 5000, targetLevel: 180 } });
     assertFeasible(r);
     assertTrue(r.params.mpEndPhase3 <= 30000, 'mpEndPhase3 must respect 30k cap');
+  });
+});
+
+// ────────────────────────── prepareInputs clamping ──────────────────────────
+
+describe('prepareInputs clamps below-Min HP/MP', () => {
+  test('Current MP below Min MP is clamped up and recorded in notes', () => {
+    const cur = { level: 100, hp: 5000, mp: 100, str: 4, dex: 4, luk: 4, baseInt: 4 };
+    const goals = { hpGoal: 30000, mpGoal: 5000, targetLevel: 180 };
+    const notes = prepareInputs(CLASSES['Night Lord'], cur, goals, 'Night Lord');
+    // NL Min MP at lvl 100 = 14*100 + 135 = 1535
+    assertEq(cur.mp, 1535, 'Current MP clamped to Min MP');
+    const note = notes.find(n => n.fieldId === 'i-cur-mp');
+    assertTrue(note, 'note recorded for Current MP');
+    assertEq(note.clamped, 1535);
+    assertEq(note.atLevel, 100);
+    assertEq(note.className, 'Night Lord');
+  });
+  test('Above-Min values are not clamped and produce no notes', () => {
+    const cur = { level: 100, hp: 5000, mp: 2000, str: 4, dex: 4, luk: 4, baseInt: 4 };
+    const goals = { hpGoal: 30000, mpGoal: 5000, targetLevel: 180 };
+    const notes = prepareInputs(CLASSES['Night Lord'], cur, goals, 'Night Lord');
+    assertEq(cur.mp, 2000, 'Current MP unchanged');
+    assertEq(notes.length, 0, 'no notes');
+  });
+  test('All four fields can be clamped in one call', () => {
+    const cur = { level: 50, hp: 1, mp: 1, str: 4, dex: 4, luk: 4, baseInt: 4 };
+    const goals = { hpGoal: 1, mpGoal: 1, targetLevel: 180 };
+    const notes = prepareInputs(CLASSES['Magician'], cur, goals, 'Magician');
+    assertEq(notes.length, 4, '4 notes for 4 below-min values');
+    assertTrue(notes.find(n => n.fieldId === 'i-cur-hp'), 'Current HP note');
+    assertTrue(notes.find(n => n.fieldId === 'i-cur-mp'), 'Current MP note');
+    assertTrue(notes.find(n => n.fieldId === 'i-hp-goal'), 'HP Goal note');
+    assertTrue(notes.find(n => n.fieldId === 'i-mp-goal'), 'MP Goal note');
   });
 });
 
