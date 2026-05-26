@@ -293,13 +293,20 @@ describe('levelTable output', () => {
       assertTrue(rows[i].hp >= rows[i-1].hp, `HP non-decreasing at row ${i}`);
     }
   });
-  test('Final-row HP matches the summary finalHP', () => {
+  test('Final-row HP matches the summary finalHP exactly (analytical and per-level paths unified)', () => {
     const r = plan({ class: 'Night Lord', goals: { hpGoal: 30000, mpGoal: 5000, targetLevel: 180 } });
     assertFeasible(r);
     const rows = levelTable(CLASSES['Night Lord'], { level: 1, hp: 50, mp: 5, baseInt: 4, mainStat: 4 }, { hpGoal: 30000, mpGoal: 5000, targetLevel: 180 }, 40, 1.0, r);
     const lastRow = rows[rows.length - 1];
-    // Allow ±15 HP rounding tolerance (stale wash ceil() can overshoot the goal by up to staleAPHP-1)
-    assertTrue(Math.abs(lastRow.hp - r.finalHP) <= 16, `last row HP ${lastRow.hp} vs summary ${r.finalHP}`);
+    // Both code paths now go through the same per-level math — no tolerance needed.
+    assertEq(lastRow.hp, r.finalHP, `last row HP ${lastRow.hp} vs summary ${r.finalHP}`);
+  });
+  test('Final-row MP matches the summary finalMP exactly', () => {
+    const r = plan({ class: 'Night Lord', goals: { hpGoal: 30000, mpGoal: 5000, targetLevel: 180 } });
+    assertFeasible(r);
+    const rows = levelTable(CLASSES['Night Lord'], { level: 1, hp: 50, mp: 5, baseInt: 4, mainStat: 4 }, { hpGoal: 30000, mpGoal: 5000, targetLevel: 180 }, 40, 1.0, r);
+    const lastRow = rows[rows.length - 1];
+    assertEq(lastRow.mp, r.finalMP, `last row MP ${lastRow.mp} vs summary ${r.finalMP}`);
   });
 });
 

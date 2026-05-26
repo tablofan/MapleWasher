@@ -115,8 +115,8 @@ function washCycleMP(classData, baseInt) {
 }
 
 // Per-level MP gained from INT after a level-up: floor((Base INT * MW + Gear INT) / 10).
-// Gear INT contributes only if level ≥ GEAR_WORN_FROM_LEVEL.
-function intMPPerLevel(classData, baseInt, gearInt, mwMultiplier, level) {
+// Gear INT contributes only if level ≥ GEAR_WORN_FROM_LEVEL. Class-independent (no classData).
+function intMPPerLevel(baseInt, gearInt, mwMultiplier, level) {
   const gearActive = level >= GEAR_WORN_FROM_LEVEL ? gearInt : 0;
   return Math.floor((baseInt * mwMultiplier + gearActive) / 10);
 }
@@ -139,34 +139,41 @@ function washCycleMPCost(classData, count) {
 // Sum of INT-driven MP contributions over levels (fromLevel, toLevel] (level-ups at L = fromLevel+1 … toLevel).
 // Per Nise: MP Gained LvlUP includes Total INT/10. Per Krythan: MW multiplies the Base-INT portion only.
 // Per spec: Gear INT is worn from level GEAR_WORN_FROM_LEVEL onward (lvl 10 by default).
-// Per level: gain = floor((Base_INT_at_L * MW + Gear_INT_at_L) / 10).
+// Per level L: gain = floor((Base_INT_at_L * MW + Gear_INT_at_L) / 10), via intMPPerLevel().
+//
+// For plateau ranges (startInt === endInt) the sum is computed as `levels * intMPPerLevel(...)`.
+// For ramp ranges, this iterates per level using the same `+5 INT per level, capped at endInt`
+// rule that levelTable() applies — so the analytical sum here and the per-level walk in
+// levelTable always agree exactly. This is the contract that lets us drop the test tolerance.
 function intMPContribution(fromLevel, toLevel, startInt, endInt, gearInt, mwMultiplier) {
   const levels = toLevel - fromLevel;
   if (levels <= 0) return 0;
-  // Linear interpolation of Base INT across the phase.
-  // intAt(L) = startInt + (endInt - startInt) * (L - fromLevel) / levels
 
-  if (toLevel < GEAR_WORN_FROM_LEVEL) {
-    // No gear contribution in the whole range.
-    const avg = (startInt + endInt) / 2;
-    return levels * Math.floor((avg * mwMultiplier) / 10);
+  if (startInt === endInt) {
+    // Plateau: INT constant across the range. Split at the gear threshold for one O(1) answer.
+    if (toLevel < GEAR_WORN_FROM_LEVEL) {
+      return levels * Math.floor((startInt * mwMultiplier) / 10);
+    }
+    if (fromLevel + 1 >= GEAR_WORN_FROM_LEVEL) {
+      return levels * Math.floor((startInt * mwMultiplier + gearInt) / 10);
+    }
+    const preLevels = (GEAR_WORN_FROM_LEVEL - 1) - fromLevel;
+    const postLevels = levels - preLevels;
+    return preLevels * Math.floor((startInt * mwMultiplier) / 10)
+         + postLevels * Math.floor((startInt * mwMultiplier + gearInt) / 10);
   }
-  if (fromLevel + 1 >= GEAR_WORN_FROM_LEVEL) {
-    // Gear contributes to all level-ups in the range.
-    const avg = (startInt + endInt) / 2;
-    return levels * Math.floor((avg * mwMultiplier + gearInt) / 10);
+
+  // Ramp: walk per level. At the START of level L (used for L's intMP gain), INT = the value
+  // after level L-1's allocations. The per-level allocation is +5 INT (Phase 1: fresh AP all to
+  // INT; Phase 2 build: 5 -MP +INT resets), capped so Base INT never exceeds endInt.
+  let intAtL = startInt;
+  let total = 0;
+  for (let i = 1; i <= levels; i++) {
+    const L = fromLevel + i;
+    total += intMPPerLevel(intAtL, gearInt, mwMultiplier, L);
+    intAtL = Math.min(endInt, intAtL + 5);
   }
-  // Split at the gear-worn threshold.
-  // Pre-gear level-ups: L in [fromLevel+1, GEAR_WORN_FROM_LEVEL - 1].
-  // Post-gear level-ups: L in [GEAR_WORN_FROM_LEVEL, toLevel].
-  const preLevels = (GEAR_WORN_FROM_LEVEL - 1) - fromLevel;
-  const postLevels = toLevel - (GEAR_WORN_FROM_LEVEL - 1);
-  // Base INT at the boundary (just before gear is worn).
-  const intAtBoundary = startInt + (endInt - startInt) * (preLevels / levels);
-  const avgPre = (startInt + intAtBoundary) / 2;
-  const avgPost = (intAtBoundary + endInt) / 2;
-  return preLevels * Math.floor((avgPre * mwMultiplier) / 10)
-       + postLevels * Math.floor((avgPost * mwMultiplier + gearInt) / 10);
+  return total;
 }
 
 // ─────────────────── Phase steps ───────────────────
@@ -255,7 +262,7 @@ function runCleanup(classData, hpEndPhase3, mpEndPhase3Raw, goals, targetBaseInt
 //   At targetLevel: Stale HP wash (-MP +HP) to fill remaining HP gap, then Reset Base INT (-INT +MainStat) to STARTING_MAIN_STAT (skipped for Mages).
 //
 // Returns { feasible, finalHP, finalMP, apResets, breakdown, params }.
-function evaluateStrategy(classData, currentState, goals, gearInt, mwMultiplier, params, ranges) {
+function evaluateStrategy(classData, currentState, goals, gearInt, mwMultiplier, params, ranges, phase1Cache) {
   const { targetBaseInt, mpWashStart, mpWashStop, shift } = params;
   ranges = ranges || precomputeRanges(classData, currentState.level, goals.targetLevel);
 
@@ -267,8 +274,8 @@ function evaluateStrategy(classData, currentState, goals, gearInt, mwMultiplier,
     return { feasible: false, reason: 'invalid phase ordering' };
   }
 
-  // --- Phase 1 ---
-  const p1 = runPhase1(classData, currentState, params, gearInt, mwMultiplier);
+  // --- Phase 1 (hoistable: depends only on currentState, mpWashStart, shift — not on mpWashStop / freshHP / staleHP)
+  const p1 = phase1Cache || runPhase1(classData, currentState, params, gearInt, mwMultiplier);
   if (p1.phase1EndInt > targetBaseInt) return { feasible: false, reason: 'phase 1 overshoots target INT' };
 
   // --- Phase 2 ---
@@ -286,8 +293,8 @@ function evaluateStrategy(classData, currentState, goals, gearInt, mwMultiplier,
     + p3.mpFromResets;
 
   // MP at the Phase 2 → Phase 3 boundary (the peak if Phase 3 drains MP).
-  const naturalMPInPhase3 = cumulativeNaturalMPBase(classData, mpWashStop, goals.targetLevel);
-  const jaMPInPhase3 = jaMPBonusInRange(classData, mpWashStop, goals.targetLevel);
+  const naturalMPInPhase3 = ranges.naturalMPInRange(mpWashStop, goals.targetLevel);
+  const jaMPInPhase3 = ranges.jaMPInRange(mpWashStop, goals.targetLevel);
   const mpEndPhase2 = mpEndPhase3Raw - (naturalMPInPhase3 + jaMPInPhase3 + p3.mpFromInt + p3.mpFromResets);
 
   // --- 30k caps + Min MP/HP invariant checks ---
@@ -296,8 +303,8 @@ function evaluateStrategy(classData, currentState, goals, gearInt, mwMultiplier,
   if (hpEndPhase3 > MAX_HP) return { feasible: false, reason: `Plan overshoots the 30,000 HP cap (would reach ${Math.round(hpEndPhase3)})` };
 
   const mpAtMPWashStart = currentState.mp
-    + cumulativeNaturalMPBase(classData, currentState.level, mpWashStart)
-    + jaMPBonusInRange(classData, currentState.level, mpWashStart)
+    + ranges.naturalMPInRange(currentState.level, mpWashStart)
+    + ranges.jaMPInRange(currentState.level, mpWashStart)
     + p1.mpFromInt;
   const minMPAtStart = minMPAtLevel(classData, mpWashStart);
   if (mpAtMPWashStart < minMPAtStart) {
@@ -358,12 +365,24 @@ function evaluateStrategy(classData, currentState, goals, gearInt, mwMultiplier,
 
 // Precompute level-range quantities that don't depend on strategy choice.
 // (Called once outside the brute-force loop; each saves O(targetLevel) work per evaluation.)
+// Builds prefix sums for O(1) range queries — partial ranges are pulled by subtraction.
 function precomputeRanges(classData, fromLevel, toLevel) {
+  const naturalMPPrefix = new Float64Array(toLevel + 2);
+  const jaMPPrefix = new Float64Array(toLevel + 2);
+  for (let L = 1; L <= toLevel; L++) {
+    naturalMPPrefix[L] = naturalMPPrefix[L - 1] + naturalMPGainAtLevel(classData, L);
+    jaMPPrefix[L] = jaMPPrefix[L - 1];
+    for (const ja of classData.jaBonuses) {
+      if (ja.level === L) jaMPPrefix[L] += ja.mp;
+    }
+  }
   return {
     hpNatural: cumulativeNaturalHP(classData, fromLevel, toLevel),
-    mpNaturalBase: cumulativeNaturalMPBase(classData, fromLevel, toLevel),
+    mpNaturalBase: naturalMPPrefix[toLevel] - naturalMPPrefix[fromLevel],
     hpJA: jaHPBonusInRange(classData, fromLevel, toLevel),
-    mpJA: jaMPBonusInRange(classData, fromLevel, toLevel),
+    mpJA: jaMPPrefix[toLevel] - jaMPPrefix[fromLevel],
+    naturalMPInRange: (from, to) => naturalMPPrefix[to] - naturalMPPrefix[from],
+    jaMPInRange: (from, to) => jaMPPrefix[to] - jaMPPrefix[from],
   };
 }
 
@@ -465,6 +484,13 @@ function optimize(classData, currentState, goals, gearInt, mwMultiplier) {
       for (const mpWashStart of mpWashStartCandidates) {
         if (mpWashStart < currentState.level || mpWashStart > goals.targetLevel) continue;
 
+        // Hoist Phase 1 out of the inner 3 loops — Phase 1 depends only on (currentState,
+        // mpWashStart, shift) and the per-level iteration would otherwise re-run for every
+        // (mpWashStop × freshHP × staleHP) combo. This restores most of the perf cost from
+        // unifying intMPContribution's math with levelTable.
+        const phase1Cache = runPhase1(classData, currentState, { mpWashStart, shift, targetBaseInt }, gearInt, mwMultiplier);
+        if (phase1Cache.phase1EndInt > targetBaseInt) continue;
+
         // mpWashStop step 1 for accuracy. Phase 3 freshHPPerLevel full sweep [0..5] — needed for
         // Warriors/Buccaneers where intermediate values (2, 4) are often optimal.
         // Phase 3 staleHPPerLevel [0..5]: lets the optimizer absorb MP overshoot mid-flight via -MP+HP.
@@ -473,7 +499,7 @@ function optimize(classData, currentState, goals, gearInt, mwMultiplier) {
             for (let staleHPPerLevelPhase3 = 0; staleHPPerLevelPhase3 <= 5; staleHPPerLevelPhase3++) {
               const result = evaluateStrategy(classData, currentState, goals, gearInt, mwMultiplier, {
                 targetBaseInt, mpWashStart, mpWashStop, shift, freshHPPerLevelPhase3, staleHPPerLevelPhase3,
-              }, ranges);
+              }, ranges, phase1Cache);
 
               if (result.feasible && result.finalHP >= goals.hpGoal) {
                 if (!best || result.apResets < best.apResets) best = result;
@@ -588,7 +614,7 @@ function levelTable(classData, currentState, goals, gearInt, mwMultiplier, resul
       // INT reset happens AT target level AFTER this level-up's MP gain, so use baseInt and full gearInt here.
       hp += naturalHPGainAtLevel(classData, L);
       mp += naturalMPGainAtLevel(classData, L);
-      mp += intMPPerLevel(classData, baseInt, gearInt, mwMultiplier, L);
+      mp += intMPPerLevel(baseInt, gearInt, mwMultiplier, L);
       // JA bonus this level
       for (const ja of classData.jaBonuses) {
         if (ja.level === L) {
