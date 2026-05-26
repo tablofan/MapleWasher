@@ -125,6 +125,7 @@ const CLASSES = {
     // activates at maxHPActivatesAt. freshAPHP, by contrast, is the WITH-MaxHP value
     // (the +20 bonus on AP allocations is baked in). Same asymmetry for Warriors below.
     naturalHPPerLevel: 25,
+    // Same 18-23 range as Corsair; using 20 (floor of 20.5) underestimates MP by ~0.5/lvl.
     naturalMPPerLevel: 20,
     freshAPHP: 38,
     staleAPHP: 18,

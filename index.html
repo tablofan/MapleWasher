@@ -280,11 +280,13 @@
 
     .result {
       opacity: 0;
+      visibility: hidden;  /* hide from accessibility tree until populated */
       transform: translateY(8px);
       transition: opacity 0.5s ease, transform 0.5s ease;
     }
     .result.shown {
       opacity: 1;
+      visibility: visible;
       transform: translateY(0);
     }
 
@@ -636,7 +638,7 @@
         </div>
       </div>
 
-      <div class="form-error" id="form-error" hidden></div>
+      <div class="form-error" id="form-error" role="alert" aria-live="polite" hidden></div>
 
       <div class="calc-row">
         <button id="btn-calc" type="submit" class="btn-calc">Calculate optimal plan <span class="arr">→</span></button>
@@ -762,8 +764,9 @@
       const hp = readField('i-cur-hp');
       const mp = readField('i-cur-mp');
       const baseInt = readField('i-cur-int');
-      // For Mages, mainStat is hidden and not used (INT is the main stat). Default to 4.
-      const mainStat = isMage ? 4 : readField('i-cur-mainstat');
+      // For Mages, INT IS the Main Stat. The hidden Main Stat field is not read; we mirror baseInt
+      // so any "shift" math (which sees mainStat as the conversion source) treats them as one stat.
+      const mainStat = isMage ? baseInt : readField('i-cur-mainstat');
       const hpGoal = readField('i-hp-goal');
       const mpGoal = readField('i-mp-goal');
       const targetLevel = readField('i-target-level');
@@ -804,11 +807,13 @@
     }
 
     const opLabels = {
-      shift: { op: '-STAT +INT', label: 'Mid-progress shift to INT' },
-      mpWash: { op: '-MP +INT/STAT', label: 'MP Wash cycles' },
-      phase3Fresh: { op: '-MP +STAT', label: 'Fresh HP Wash (post-MP-Wash)' },
-      intReset: { op: '-INT +STAT', label: 'Reset Base INT' },
-      staleHPWash: { op: '-MP +HP', label: 'Stale HP Wash' },
+      // shift entry is direction-dependent — `op` is computed at render time using breakdown.shiftDir.
+      shift_up:   { op: '-STAT +INT', label: 'Mid-progress shift to INT' },
+      shift_down: { op: '-INT +STAT', label: 'Mid-progress shift from INT (reduce overbuilt INT)' },
+      mpWash:     { op: '-MP +INT/STAT', label: 'MP Wash cycles' },
+      phase3Fresh:{ op: '-MP +STAT', label: 'Fresh HP Wash (post-MP-Wash)' },
+      intReset:   { op: '-INT +STAT', label: 'Reset Base INT' },
+      staleHPWash:{ op: '-MP +HP', label: 'Stale HP Wash' },
     };
 
     function renderResult(input, result) {
@@ -901,11 +906,14 @@
         animateNumberText(daysEl, 0, days);
       }
 
+      // Filter to numeric reset-count keys; map `shift` to direction-specific meta.
       const breakdownEntries = Object.entries(result.breakdown)
-        .filter(([, count]) => count > 0)
+        .filter(([key, count]) => typeof count === 'number' && count > 0)
         .sort(([, a], [, b]) => b - a);
       const breakdownHTML = breakdownEntries.map(([key, count]) => {
-        const meta = opLabels[key];
+        const metaKey = key === 'shift' ? (result.breakdown.shiftDir === 'down' ? 'shift_down' : 'shift_up') : key;
+        const meta = opLabels[metaKey];
+        if (!meta) return '';  // skip non-display keys (shiftDir)
         const op = meta.op.replace(/STAT/g, mainStat);
         return `
           <div class="br-row">

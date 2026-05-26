@@ -296,8 +296,10 @@ function optimize(classData, currentState, goals, gearInt, mwMultiplier) {
     return { feasible: false, reason: `HP Goal (${goals.hpGoal}) is below the minimum possible HP (${minHPAtTarget}) at level ${goals.targetLevel}.` };
   }
 
+  const isMage = classData.mainStat === 'INT';
   const remainingLevels = goals.targetLevel - currentState.level;
-  const maxPositiveShift = Math.max(0, currentState.mainStat - STARTING_MAIN_STAT);
+  // For Mages, INT IS the Main Stat — converting +STAT into +INT is a no-op, so positive shift is disabled.
+  const maxPositiveShift = isMage ? 0 : Math.max(0, currentState.mainStat - STARTING_MAIN_STAT);
   const maxNegativeShift = Math.max(0, currentState.baseInt - STARTING_MAIN_STAT);
 
   // Precompute range sums (these depend only on class + currentLevel + targetLevel, not strategy).
@@ -425,7 +427,7 @@ function phasePlan(classData, currentState, goals, result) {
     phases.push({
       range: `Lvl ${p.mpWashStop} → ${goals.targetLevel}`,
       action: `Allocate fresh AP to ${classData.mainStat}.`,
-      phase: 'Build Main Stat',
+      phase: `Build ${classData.mainStat}`,
     });
   }
   if (b.staleHPWash > 0) {

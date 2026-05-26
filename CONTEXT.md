@@ -65,7 +65,7 @@ The character level at which the user begins **MP Wash** cycles. Before this, fr
 The peak **Base INT** the calculator decides the user should build up to. Sustained from the end of the INT-build phase through to **Target Level**. Reset back to **Main Stat** at **Target Level**.
 
 **Phase Plan**:
-The level-banded sequence of allocation strategies the calculator outputs. Always shaped: build **Base INT** → **MP Wash** → reset **Base INT** to **Main Stat** at **Target Level**. **Fresh HP Wash** and **Stale HP Wash** are interleaved as needed.
+The level-banded sequence of allocation strategies the calculator outputs. Shaped: *(optional)* pre-game **Shift to/from INT** → build **Base INT** → **MP Wash** → reset **Base INT** to **Main Stat** at **Target Level**. **Fresh HP Wash** and **Stale HP Wash** are interleaved as needed. **Magicians skip the Base-INT reset** because INT is already their Main Stat.
 
 ## Calculator behavior
 
