@@ -28,6 +28,15 @@
 
     * { box-sizing: border-box; margin: 0; padding: 0; }
     html { scroll-behavior: smooth; }
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+      *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+      }
+      .result, .result.shown { transform: none !important; }
+    }
 
     body {
       font-family: 'Inter Tight', system-ui, sans-serif;
@@ -250,6 +259,24 @@
       font-size: 13.5px;
       color: var(--text-mute);
     }
+
+    .field.invalid { border-bottom-color: var(--maple); }
+    .field.invalid label { color: var(--maple); }
+
+    .form-error {
+      font-family: 'Inter Tight', sans-serif;
+      font-weight: 500;
+      font-size: 13.5px;
+      color: var(--maple);
+      padding: 6px 10px;
+      border-left: 2px solid var(--maple);
+      background: var(--maple-glow);
+      margin-top: 8px;
+    }
+    .form-error[hidden] { display: none; }
+
+    /* Hide Main Stat field when class is Mage (INT is the main stat — same as Base INT) */
+    body.is-mage .field-mainstat { display: none; }
 
     .result {
       opacity: 0;
@@ -485,6 +512,11 @@
       line-height: 1.55;
     }
 
+    /* Color contrast bumps for very-muted text */
+    @media (prefers-color-scheme: dark), (prefers-color-scheme: no-preference) {
+      :root { --text-faint: #9c8c79; }  /* was #877766 — bumped for WCAG AA */
+    }
+
     .footer {
       margin-top: 96px;
       padding-top: 32px;
@@ -528,6 +560,7 @@
       </div>
     </header>
 
+    <form id="calc-form" onsubmit="event.preventDefault(); runCalc(true);">
     <section class="section">
       <div class="section-head">
         <span class="section-num">i.</span>
@@ -550,23 +583,23 @@
         <div class="field-grid">
           <div class="field">
             <label for="i-cur-level">level</label>
-            <input id="i-cur-level" type="number" inputmode="numeric" min="1" max="200" value="1">
+            <input id="i-cur-level" type="number" inputmode="numeric" min="1" max="200" step="1" value="1" required>
           </div>
           <div class="field">
             <label for="i-cur-hp">hp</label>
-            <input id="i-cur-hp" type="number" inputmode="numeric" min="0" value="50">
+            <input id="i-cur-hp" type="number" inputmode="numeric" min="0" max="30000" step="1" value="50" required>
           </div>
           <div class="field">
             <label for="i-cur-mp">mp</label>
-            <input id="i-cur-mp" type="number" inputmode="numeric" min="0" value="5">
+            <input id="i-cur-mp" type="number" inputmode="numeric" min="0" max="30000" step="1" value="5" required>
           </div>
           <div class="field">
             <label for="i-cur-int">base int</label>
-            <input id="i-cur-int" type="number" inputmode="numeric" min="4" value="4">
+            <input id="i-cur-int" type="number" inputmode="numeric" min="4" max="9999" step="1" value="4" required>
           </div>
-          <div class="field">
+          <div class="field field-mainstat">
             <label for="i-cur-mainstat"><span id="i-cur-mainstat-label">main stat</span></label>
-            <input id="i-cur-mainstat" type="number" inputmode="numeric" min="4" value="4">
+            <input id="i-cur-mainstat" type="number" inputmode="numeric" min="4" max="9999" step="1" value="4" required>
           </div>
         </div>
       </div>
@@ -576,15 +609,15 @@
         <div class="field-grid">
           <div class="field">
             <label for="i-hp-goal">hp goal</label>
-            <input id="i-hp-goal" type="number" inputmode="numeric" min="0" value="30000">
+            <input id="i-hp-goal" type="number" inputmode="numeric" min="0" max="30000" step="1" value="30000" required>
           </div>
           <div class="field">
             <label for="i-mp-goal">mp goal</label>
-            <input id="i-mp-goal" type="number" inputmode="numeric" min="0" value="4000">
+            <input id="i-mp-goal" type="number" inputmode="numeric" min="0" max="30000" step="1" value="4000" required>
           </div>
           <div class="field">
             <label for="i-target-level">target level</label>
-            <input id="i-target-level" type="number" inputmode="numeric" min="2" max="200" value="135">
+            <input id="i-target-level" type="number" inputmode="numeric" min="2" max="200" step="1" value="135" required>
           </div>
         </div>
       </div>
@@ -594,7 +627,7 @@
         <div class="field-grid">
           <div class="field">
             <label for="i-gear-int">gear int</label>
-            <input id="i-gear-int" type="number" inputmode="numeric" min="0" value="40">
+            <input id="i-gear-int" type="number" inputmode="numeric" min="0" max="999" step="1" value="40" required>
           </div>
           <div class="field">
             <label for="i-mw">maple warrior</label>
@@ -603,11 +636,14 @@
         </div>
       </div>
 
+      <div class="form-error" id="form-error" hidden></div>
+
       <div class="calc-row">
-        <button id="btn-calc" class="btn-calc">Calculate optimal plan <span class="arr">→</span></button>
-        <span class="calc-hint">Output recomputes when you change inputs.</span>
+        <button id="btn-calc" type="submit" class="btn-calc">Calculate optimal plan <span class="arr">→</span></button>
+        <span class="calc-hint">Output recomputes when you change inputs. Press Enter to recalculate.</span>
       </div>
     </section>
+    </form>
 
     <section class="section result" id="result">
       <div class="section-head">
@@ -616,7 +652,7 @@
         <span class="section-rule"></span>
       </div>
 
-      <div id="infeas-block"></div>
+      <div id="infeas-block" role="alert" aria-live="assertive"></div>
 
       <div id="summary-block">
         <div class="summary-grid" id="summary-grid"></div>
@@ -700,33 +736,58 @@
     function updateMainStatLabel() {
       const cls = CLASSES[classSelect.value];
       $('i-cur-mainstat-label').textContent = cls.mainStat.toLowerCase();
+      document.body.classList.toggle('is-mage', cls.mainStat === 'INT');
+    }
+
+    // Read one numeric field; returns the parsed Number or null if blank / non-finite.
+    // Bound checks against the input's min/max attributes are respected.
+    function readField(id) {
+      const el = $(id);
+      const raw = el.value.trim();
+      if (raw === '') return null;
+      const n = Number(raw);
+      if (!Number.isFinite(n)) return null;
+      const min = el.min !== '' ? Number(el.min) : -Infinity;
+      const max = el.max !== '' ? Number(el.max) : Infinity;
+      if (n < min || n > max) return null;
+      return n;
     }
 
     function readInputs() {
       const className = classSelect.value;
       const classData = CLASSES[className];
-      const mwLevel = parseInt(mwSelect.value, 10);
-      const mwMultiplier = MAPLE_WARRIOR_LEVELS.find(m => m.level === mwLevel).multiplier;
+      const isMage = classData.mainStat === 'INT';
+
+      const level = readField('i-cur-level');
+      const hp = readField('i-cur-hp');
+      const mp = readField('i-cur-mp');
+      const baseInt = readField('i-cur-int');
+      // For Mages, mainStat is hidden and not used (INT is the main stat). Default to 4.
+      const mainStat = isMage ? 4 : readField('i-cur-mainstat');
+      const hpGoal = readField('i-hp-goal');
+      const mpGoal = readField('i-mp-goal');
+      const targetLevel = readField('i-target-level');
+      const gearInt = readField('i-gear-int');
+
+      const fields = [level, hp, mp, baseInt, mainStat, hpGoal, mpGoal, targetLevel, gearInt];
+      if (fields.some(v => v === null)) return null;
+
+      const mwLevel = Number(mwSelect.value);
+      const mwEntry = MAPLE_WARRIOR_LEVELS.find(m => Number(m.level) === mwLevel);
+      const mwMultiplier = mwEntry ? mwEntry.multiplier : 1.0;
 
       return {
-        className,
-        classData,
-        currentState: {
-          level: parseInt($('i-cur-level').value, 10) || 1,
-          hp: parseFloat($('i-cur-hp').value) || 50,
-          mp: parseFloat($('i-cur-mp').value) || 5,
-          baseInt: parseInt($('i-cur-int').value, 10) || 4,
-          mainStat: parseInt($('i-cur-mainstat').value, 10) || 4,
-        },
-        goals: {
-          hpGoal: parseFloat($('i-hp-goal').value) || 0,
-          mpGoal: parseFloat($('i-mp-goal').value) || 0,
-          targetLevel: parseInt($('i-target-level').value, 10) || 100,
-        },
-        gearInt: parseInt($('i-gear-int').value, 10) || 0,
-        mwMultiplier,
-        mwLevel,
+        className, classData, mwMultiplier, mwLevel,
+        currentState: { level, hp, mp, baseInt, mainStat },
+        goals: { hpGoal, mpGoal, targetLevel },
+        gearInt,
       };
+    }
+
+    function showFormError(msg) {
+      const el = $('form-error');
+      if (msg) { el.textContent = msg; el.hidden = false; }
+      else { el.hidden = true; }
     }
 
     function animateNumber(el, start, end, duration = 700, suffix = '') {
@@ -913,24 +974,43 @@
       requestAnimationFrame(tick);
     }
 
-    function runCalc() {
+    function runCalc(force = false) {
       const input = readInputs();
+      if (!input) {
+        // Don't wipe a previous valid result while the user is mid-edit.
+        if (force) showFormError('Fill in every field with a value in its allowed range to calculate.');
+        return;
+      }
+      // Cross-field validation
+      if (input.currentState.level >= input.goals.targetLevel) {
+        showFormError(`Target Level (${input.goals.targetLevel}) must be greater than Current Level (${input.currentState.level}).`);
+        return;
+      }
+      showFormError(null);
       const result = optimize(input.classData, input.currentState, input.goals, input.gearInt, input.mwMultiplier);
       renderResult(input, result);
     }
 
     classSelect.addEventListener('change', () => {
       updateMainStatLabel();
+      // Auto-sync Base INT to Main Stat for Mages (where INT IS the main stat) so they're consistent.
+      const cls = CLASSES[classSelect.value];
+      if (cls.mainStat === 'INT') {
+        $('i-cur-mainstat').value = $('i-cur-int').value;
+      }
       runCalc();
     });
-    mwSelect.addEventListener('change', runCalc);
+    mwSelect.addEventListener('change', () => runCalc());
     document.querySelectorAll('input[type=number]').forEach(el => {
       el.addEventListener('input', () => {
         clearTimeout(window.__calcDebounce);
-        window.__calcDebounce = setTimeout(runCalc, 200);
+        window.__calcDebounce = setTimeout(() => runCalc(), 200);
       });
     });
-    $('btn-calc').addEventListener('click', runCalc);
+    // The Calculate button is a form submit (triggered by the <form onsubmit>). Cancel any pending debounce.
+    $('btn-calc').addEventListener('click', () => {
+      clearTimeout(window.__calcDebounce);
+    });
 
     $('leveltable-toggle').addEventListener('click', () => {
       $('leveltable').classList.toggle('open');
@@ -941,7 +1021,7 @@
     });
 
     updateMainStatLabel();
-    runCalc();
+    runCalc(true);
   </script>
 </body>
 </html>
