@@ -213,8 +213,11 @@ const CLASSES = {
     naturalMPPerLevel: 23,
     freshAPHP: 8,
     staleAPHP: 6,
-    // With MaxMP skill maxed (always-assumed). Without MaxMP would be 18; the +10 is the MaxMP bonus on AP allocations.
-    freshAPMPBase: 28,
+    // With MaxMP skill maxed (always-assumed). Base AP-assignment MP is ~18; Improving Max MP adds
+    // +20 (the "2× Improving Max MP Increase" term). 18 + 20 = 38. Confirmed by Krythan's mage sheet
+    // (89 MP/wash at avg base INT 511 ⟹ base ≈ 38) and Shivering's comprehensive mage guide
+    // (net wash 56-58 at base INT 480 ⟹ base ≈ 38). Matches the +20 used for naturalMP level-ups.
+    freshAPMPBase: 38,
     mpLossPerReset: 30,
     minMPFormula: (L) => 22 * L + 449,
     minHPFormula: (L) => 10 * L + 64,

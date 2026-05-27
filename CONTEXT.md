@@ -69,6 +69,10 @@ Allocate 1 fresh AP → HP at level-up; the HP gain is the higher "Fresh AP HP" 
 **Stale HP Wash**:
 AP Reset `-MP +HP` — directly converts existing MP into HP at the (slightly lower) Stale AP HP rate for the class. One **AP Reset** per HP point gained. Can be scheduled either **during Phase 3** (combinable with **Fresh HP Wash** at the same level — both drain MP, both add HP) or as a **cleanup burst at Target Level** to top up the HP Goal. Mid-flight Stale HP Wash is the lever that lets the optimizer trim **MP Wash Stop Level** earlier and still reach **HP Goal** when peak MP would otherwise blow the 30k cap.
 
+**MP-Cap HP Wash**:
+The Magician HP-wash endgame. Once MP reaches the goal (typically the 30k cap), the player holds MP there: each level they allocate fresh AP → MP and immediately `-MP +HP` stale-wash all of that level's MP inflow (fresh AP gain + natural level-up + INT/10) back down, so MP never exceeds the cap and the inflow becomes HP. Distinct from ordinary **Stale HP Wash** (which drains existing MP *downward*) — here MP is *pinned* and the continuous inflow is what's converted. Dominant for Magicians because their **Fresh HP Wash** rate is tiny (≈8 HP/AP) while a high-**Base INT** Mage's per-AP MP generation converts to far more HP. Source: Krythan's mage sheet + Shivering's "Comprehensive Guide to HP/MP Washing on Mages". Non-Mage classes don't use it (their Fresh HP Wash dominates).
+_Avoid_: overflow wash, cap wash (informal)
+
 **MP Wash Start Level**:
 The character level at which the user begins **MP Wash** cycles. Before this, fresh AP goes into building **Base INT**; from this level on, fresh AP goes into MP for the wash cycle. Decided by the calculator.
 
@@ -76,7 +80,11 @@ The character level at which the user begins **MP Wash** cycles. Before this, fr
 The peak **Base INT** the calculator decides the user should build up to. Sustained from the end of the INT-build phase through to **Target Level**. Reset back to **Main Stat** at **Target Level**.
 
 **Phase Plan**:
-The level-banded sequence of allocation strategies the calculator outputs. Shaped: *(optional)* pre-game **Shift to/from INT** → build **Base INT** → **MP Wash** → *(optional)* Phase 3 combining **Fresh HP Wash** and/or **Stale HP Wash** per level → cleanup **Stale HP Wash** + reset **Base INT** to **Main Stat** at **Target Level**. **Magicians skip the Base-INT reset** because INT is already their Main Stat. The pre-game Shift to INT can draw from any of the user's non-INT stats (STR/DEX/LUK) — the player picks the source.
+The level-banded sequence of allocation strategies the calculator outputs. Two shapes:
+- **Non-Mage:** *(optional)* pre-game **Shift to/from INT** → build **Base INT** → **MP Wash** → *(optional)* Phase 3 combining **Fresh HP Wash** and/or **Stale HP Wash** per level → cleanup **Stale HP Wash** + reset **Base INT** to **Main Stat** at **Target Level**.
+- **Mage:** *(optional)* pre-game **Shift to INT** → build **Base INT** → **MP Wash** (drive MP to the goal) → **MP-Cap HP Wash** (hold MP at the goal, convert inflow to HP) to **Target Level**. **Magicians skip the Base-INT reset** because INT is already their Main Stat.
+
+The pre-game Shift to INT can draw from any of the user's non-INT stats (STR/DEX/LUK) — the player picks the source.
 
 ## Calculator behavior
 
@@ -99,7 +107,7 @@ When the calculator runs successfully:
 
 1. **Summary card** — `Target Base INT`, `MP Wash Start Level`, `MP Wash Stop Level`, total **AP Resets**, **NX Cost** (= AP Resets × 3,100), **Days-to-Wash** (= NX Cost ÷ 6,500 NX-per-day-per-account), plus a one-line per-reset-type breakdown.
 2. **Phase Plan** — level-banded allocation guide (e.g. "Lvl 4-67 · All fresh AP → INT") matching the **Search space** decisions.
-3. **Level-by-level table** — 7 columns: Level, HP, MP, Base INT, Phase, AP Resets this level, Cumulative AP Resets. Collapsed by default. The Phase column shows one of: *Build Base INT* / *MP Wash* / *Fresh HP Wash* / *Stale HP Wash* / *Fresh + Stale HP Wash* (combined Phase 3 mode) / *Build &lt;Main Stat&gt;* / *Reset Base INT* / *Stale HP Wash + Reset INT* (combined at target level when both apply) / *Done*.
+3. **Level-by-level table** — 7 columns: Level, HP, MP, Base INT, Phase, AP Resets this level, Cumulative AP Resets. Collapsed by default. The Phase column shows one of: *Build Base INT* / *MP Wash* / *Fresh HP Wash* / *Stale HP Wash* / *Fresh + Stale HP Wash* (combined Phase 3 mode) / *MP-Cap HP Wash* (Mage endgame) / *Build &lt;Main Stat&gt;* / *Reset Base INT* / *Stale HP Wash + Reset INT* (combined at target level when both apply) / *Done*.
 
 When the user's inputs make the goal **infeasible** (e.g. Mage requesting 30k HP at lvl 50), the calculator shows an **infeasibility warning** in place of the Summary, naming the violated constraint (`HP Goal exceeds maximum possible at Target Level` / `MP Goal below Minimum MP at Target Level`).
 

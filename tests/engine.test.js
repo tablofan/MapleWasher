@@ -433,9 +433,9 @@ describe('Wash-math primitives', () => {
     // NL: freshAPMPBase=10, mpLossPerReset=12 → deficit=2. floor(200/10) - 2 = 18.
     assertEq(mod.washCycleMP(CLASSES['Night Lord'], 200), 18);
   });
-  test('washCycleMP for Mage at INT 300 = floor(30) - 2 = 28', () => {
-    // Mage: freshAPMPBase=28, mpLossPerReset=30 → deficit=2. floor(300/10) - 2 = 28.
-    assertEq(mod.washCycleMP(CLASSES['Magician'], 300), 28);
+  test('washCycleMP for Mage at INT 300 = floor(30) + 8 = 38', () => {
+    // Mage: freshAPMPBase=38, mpLossPerReset=30 → deficit=-8. floor(300/10) - (-8) = 38.
+    assertEq(mod.washCycleMP(CLASSES['Magician'], 300), 38);
   });
   test('freshHPWashYield for Hero (52 HP per fresh AP) × 10 = 520', () => {
     assertEq(mod.freshHPWashYield(CLASSES['Hero'], 10), 520);
@@ -529,6 +529,44 @@ describe('prepareInputs clamps Goals only (not Current HP/MP)', () => {
     const goals = { hpGoal: 30000, mpGoal: 5000, targetLevel: 180 };
     const notes = prepareInputs(CLASSES['Night Lord'], cur, goals, 'Night Lord');
     assertEq(notes.length, 0, 'no notes');
+  });
+});
+
+// ────────────────────────── Mage MP-cap HP wash ──────────────────────────
+
+describe('Mage MP-cap HP wash (Krythan endgame)', () => {
+  test('Mage 30k MP + moderate HP is feasible (was wrongly rejected before)', () => {
+    const r = plan({ class: 'Magician', goals: { hpGoal: 6000, mpGoal: 30000, targetLevel: 180 }, gearInt: 40 });
+    assertFeasible(r);
+    assertTrue(r.params.capWash === true, 'uses cap-wash path');
+    assertTrue(r.finalMP >= 30000, 'reaches 30k MP');
+    assertTrue(r.finalMP <= 30000, 'MP capped at 30k');
+    assertTrue(r.finalHP >= 6000, 'HP goal met');
+  });
+  test('Mage 30k MP HP ceiling is ~8000 without equips/challenges (Krythan ~7700)', () => {
+    const feasible = plan({ class: 'Magician', goals: { hpGoal: 8000, mpGoal: 30000, targetLevel: 180 }, gearInt: 40 });
+    assertFeasible(feasible);
+    // 10000 HP exceeds the Mage's natural+wash ceiling at 30k MP (only reachable with HP equips/challenges).
+    const tooHigh = plan({ class: 'Magician', goals: { hpGoal: 10000, mpGoal: 30000, targetLevel: 180 }, gearInt: 40 });
+    assertInfeasible(tooHigh);
+    // The reason should be about HP reachability, not a misleading "overshoots MP cap".
+    assertTrue(/HP goal|HP\b/i.test(tooHigh.reason), `reason should mention HP, got: "${tooHigh.reason}"`);
+  });
+  test('Cap-wash apResets = mpWash + capWashes + intReset(0 for Mage) + shift', () => {
+    const r = plan({ class: 'Magician', goals: { hpGoal: 6000, mpGoal: 30000, targetLevel: 180 }, gearInt: 40 });
+    assertFeasible(r);
+    const b = r.breakdown;
+    assertEq(b.intReset, 0, 'Mage never resets INT');
+    assertEq(r.apResets, b.shift + b.mpWash + b.phase3Fresh + b.intReset + b.staleHPWash);
+  });
+  test('Cap-wash level table final row reconciles with summary (±1% tolerance)', () => {
+    const r = plan({ class: 'Magician', goals: { hpGoal: 6000, mpGoal: 30000, targetLevel: 180 }, gearInt: 40 });
+    assertFeasible(r);
+    const rows = levelTable(CLASSES['Magician'], { level: 1, hp: 50, mp: 5, str: 4, dex: 4, luk: 4, baseInt: 4 }, { hpGoal: 6000, mpGoal: 30000, targetLevel: 180 }, 40, 1.0, r);
+    const last = rows[rows.length - 1];
+    // Per-level floor() accumulates slightly differently than the analytical single-floor; allow 1%.
+    assertTrue(Math.abs(last.mp - r.finalMP) <= 300, `last row MP ${last.mp} vs summary ${r.finalMP}`);
+    assertTrue(Math.abs(last.hp - r.finalHP) <= Math.max(200, r.finalHP * 0.02), `last row HP ${last.hp} vs summary ${r.finalHP}`);
   });
 });
 
